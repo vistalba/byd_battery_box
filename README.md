@@ -1,7 +1,15 @@
-[![hacs_badge](https://img.shields.io/badge/HACS-Default-orange.svg)](https://github.com/custom-components/hacs)
+[![CI](https://github.com/TimWeyand/byd_battery_box/actions/workflows/ci.yaml/badge.svg)](https://github.com/TimWeyand/byd_battery_box/actions/workflows/ci.yaml)
+[![GitHub Release](https://img.shields.io/github/v/release/TimWeyand/byd_battery_box)](https://github.com/TimWeyand/byd_battery_box/releases/latest)
+[![HACS](https://img.shields.io/badge/HACS-Default-orange.svg)](https://hacs.xyz/)
+[![License](https://img.shields.io/github/license/TimWeyand/byd_battery_box)](LICENSE.md)
+[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.9%2B-blue.svg)](https://www.home-assistant.io/)
+[![GitHub Issues](https://img.shields.io/github/issues/TimWeyand/byd_battery_box)](https://github.com/TimWeyand/byd_battery_box/issues)
 
 # byd_battery_box
-Home assistant Custom Component for reading data from BYD Battery Box system series like HVL, HVM, HVS, LVS. This integration uses a local modbus connection. 
+Home assistant Custom Component for reading data from BYD Battery Box system series like HVL, HVM, HVS, LVS. This integration uses a local modbus connection.
+
+> [!NOTE]
+> This is a fork of [redpomodoro/byd_battery_box](https://github.com/redpomodoro/byd_battery_box). This fork has diverged from the original project and includes additional features, bug fixes, and improvements that are not available upstream.
 
 > [!CAUTION]
 > This is a work in progress project - it is still in early development stage, so there are still breaking changes possible.
@@ -37,7 +45,7 @@ The key BMU Status data will by default refreshed 30 seconds.
 Detailed BMS data will be refreshed by default every 10 minutes.
 
 # Log data
-The log data is by default updated every 10 minutes. Log data is stored in /config/custom_components/byd_battery_box/log folder. The integration uses the json file for storage and for convenience a CSV file is being stored as well.
+The log data is by default updated every 10 minutes. Log data is stored in /config/custom_components/byd_battery_box/logs folder. The integration uses the json file for storage and for convenience a CSV file is being stored as well.
 
 Use the buttons on the devices to retrieve additional log history, during the update all other data updates will be suspended. The integration writes warnings into log to see progress of the updates.
 
@@ -48,28 +56,106 @@ Use the buttons on the devices to retrieve additional log history, during the up
 > The dashboard is a Lovelace frontend plugin (HACS category "plugin"). Frontend resources are JavaScript files, not Python integrations. Therefore it correctly lives under `byd_battery_box_dashboard/` and will be installed by HACS into `/www/community/byd_battery_box_dashboard/`.
 
 
-### Battery Management Unit
+### Battery Management Unit (BMU)
 
-### Sensors
-| Entity  | Description |
+#### Sensors
+| Entity | Description | Unit |
+| --- | --- | --- |
+| State of charge | Battery state of charge | % |
+| State of health | Battery state of health | % |
+| BMU temperature | BMU board temperature | °C |
+| BMU cell temperature max | Highest cell temperature across all towers | °C |
+| BMU cell temperature min | Lowest cell temperature across all towers | °C |
+| BMU cell voltage max | Highest cell voltage across all towers | V |
+| BMU cell voltage min | Lowest cell voltage across all towers | V |
+| BMU current | Battery current (positive = charging) | A |
+| BMU battery voltage | Battery bus voltage | V |
+| BMU output voltage | Output voltage to inverter | V |
+| BMU power | Current power (positive = charging) | W |
+| Charge total energy | Lifetime total energy charged | kWh |
+| Discharge total energy | Lifetime total energy discharged | kWh |
+| Efficiency | Charge/discharge efficiency | % |
+
+#### Diagnostic
+| Entity | Description |
 | --- | --- |
+| Inverter | Connected inverter model |
+| BMU version | BMU firmware version |
+| BMU version A / B | BMU firmware version per slot |
+| BMS version | BMS firmware version |
+| Towers | Number of battery towers |
+| Modules | Number of modules per tower |
+| Application | Application type |
+| Phase | Connection phase |
+| Errors | Current error codes |
+| Total capacity | Total battery capacity (kWh) |
+| Param table version | Parameter table version |
+| Cells per module | Number of cells per module |
+| Temperature sensors per module | Number of temperature sensors per module |
+| Updated | Last data update timestamp |
+| BMU last log | Last BMU log entry |
+| Log entries | Total log entries (with log list as attribute) |
 
-### Diagnostic
-| Entity  | Description |
+### Battery Management System (BMS, per tower)
+
+#### Sensors
+| Entity | Description | Unit |
+| --- | --- | --- |
+| Cell voltage max / min | Highest/lowest cell voltage in tower | V |
+| Cell voltage max/min number | Cell ID with highest/lowest voltage | - |
+| Cell temperature max / min | Highest/lowest cell temperature in tower | °C |
+| Cell temperature max/min number | Cell ID with highest/lowest temperature | - |
+| State of charge | Tower SOC | % |
+| State of health | Tower SOH | % |
+| Current | Tower current | A |
+| Battery voltage | Tower battery voltage | V |
+| Output voltage | Tower output voltage | V |
+| Charge total energy | Tower lifetime charge energy | kWh |
+| Discharge total energy | Tower lifetime discharge energy | kWh |
+| Efficiency | Tower charge/discharge efficiency | % |
+| Cells balancing | Number of cells currently balancing | - |
+| Cells average voltage | Average cell voltage | V |
+| Cells average temperature | Average cell temperature | °C |
+| Max/Min history cell voltage | Historical max/min cell voltage | V |
+| Balancing total | Total balancing events | - |
+
+#### Diagnostic
+| Entity | Description |
 | --- | --- |
-To come!
+| Warnings | Current warning codes |
+| Errors | Current error codes |
+| Updated | Last BMS data update timestamp |
+| Last log | Last BMS log entry |
 
-### Battery Management System
+### Connection Health Monitoring
 
-### Sensors
-| Entity  | Description |
-| --- | --- |
+| Entity | Description | Unit |
+| --- | --- | --- |
+| Connection Quality | Modbus connection success rate | % |
+| Last Latency | Last measured Modbus round-trip time | ms |
+| Average Latency | Average Modbus round-trip time | ms |
+| Consecutive Failures | Number of consecutive connection failures | - |
+| Connection Health | Overall connection health status | - |
 
-### Diagnostic
-| Entity  | Description |
-| --- | --- |
-To come!
 
+### BYD Battery Box Visualization (Lovelace Card)
+
+For a rich, interactive dashboard experience, check out the companion Lovelace card: [BYD Battery Box Visualization](https://github.com/TimWeyand/byd_battery_box_visualization)
+
+![BYD Battery Box Visualization Preview](https://raw.githubusercontent.com/TimWeyand/byd_battery_box_visualization/main/images/preview.png "BYD Battery Box Visualization")
+
+Features:
+- Visualize modules and cells with current, min/max voltages and temperatures
+- Per-cell voltage bars with balancing indicators
+- SOC bar with animated charge/discharge status
+- Support for up to 3 battery towers
+- Toggle between voltage (mV) and temperature view
+- Interactive tooltips on hover/click
+- Install via HACS as a Frontend/Lovelace plugin
+
+[![Open your Home Assistant instance and open this repository in HACS (Frontend/Lovelace).](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=TimWeyand&repository=byd_battery_box_visualization&category=frontend)
+
+---
 
 ### Markdown Cards
 
@@ -292,6 +378,8 @@ Temperatures Table
 
 
 # References
-https://github.com/sarnau/BYD-Battery-Box-Infos/blob/main/Read_Modbus.py
-https://github.com/christianh17/ioBroker.bydhvs/blob/master/docs/byd-hexstructure.md
-https://github.com/smarthomeNG/plugins/tree/develop/byd_bat
+- https://github.com/redpomodoro/byd_battery_box - Original project (upstream)
+- https://github.com/TimWeyand/byd_battery_box_visualization - Companion Lovelace visualization card
+- https://github.com/sarnau/BYD-Battery-Box-Infos/blob/main/Read_Modbus.py
+- https://github.com/christianh17/ioBroker.bydhvs/blob/master/docs/byd-hexstructure.md
+- https://github.com/smarthomeNG/plugins/tree/develop/byd_bat
