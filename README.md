@@ -45,7 +45,9 @@ The key BMU Status data will by default refreshed 30 seconds.
 Detailed BMS data will be refreshed by default every 10 minutes.
 
 # Log data
-The log data is by default updated every 10 minutes. Log data is stored in /config/custom_components/byd_battery_box/logs folder. The integration uses the json file for storage and for convenience a CSV file is being stored as well.
+The log data is by default updated every 10 minutes. Log entries are stored in the Home Assistant storage (`/config/.storage/byd_battery_box.<entry_id>.log`) so they survive updates of the integration. For convenience a CSV export is written to `/config/byd_battery_box/<name>_log.csv` (e.g. `byd_battery_box_log.csv`). Entries older than 30 days are removed.
+
+Log files of older versions (`/config/custom_components/byd_battery_box/logs/byd_log.json`) are migrated automatically on the first start.
 
 Use the buttons on the devices to retrieve additional log history, during the update all other data updates will be suspended. The integration writes warnings into log to see progress of the updates.
 

@@ -1,45 +1,32 @@
 {
-    "title": "BYD Battery Box",
-    "config": {
-      "step": {
-        "user": {
-          "title": "Set up BYD Battery Box",
-          "description": "Please provide connection details to BYD Battery Box.",
-          "data": {
-            "ip_address": "IP Address",
-            "port": "Port",
-            "unit_id": "Modbus Unit/Slave ID",
-            "scan_interval": "Scan Interval in Seconds for the BMU",
-            "bms_scan_interval": "Scan Interval in Seconds for BMS Unit(s)"
-          }
+  "title": "BYD Battery Box",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up BYD Battery Box",
+        "description": "Please provide connection details to BYD Battery Box.",
+        "data": {
+          "name": "Name",
+          "host": "IP Address",
+          "port": "Port",
+          "unit_id": "Modbus Unit/Slave ID",
+          "scan_interval": "Scan Interval in Seconds for the BMU",
+          "bms_scan_interval": "Scan Interval in Seconds for BMS Unit(s)",
+          "log_scan_interval": "Scan Interval in Seconds for the log data"
         }
-      },
-      "error": {
-        "cannot_connect": "Failed to connect",
-        "invalid_port": "Invalid port number",
-        "invalid_host": "Invalid host address",
-        "unknown": "An unknown error occurred",
-        "scan_interval_too_short": "Scan interval is too short. Minimum 10 seconds.",
-        "bms_scan_interval_too_short": "BMS Scan interval is too short. Minimum 60 seconds."
       }
     },
-    "options": {
-      "step": {
-        "init": {
-            "title": "Set up BYD Battery Box",
-            "description": "Set options for your BYD Battery Box.",
-            "data": {
-              "ip_address": "IP Address",
-              "port": "Port",
-              "unit_id": "Modbus Unit/Slave ID",
-              "scan_interval": "Scan Interval in Seconds for the BMU",
-              "bms_scan_interval": "Scan Interval in Seconds for BMS Unit(s)"
-            }
-        }
-      },
-      "error": {
-        "scan_interval_too_short": "Scan interval is too short. Minimum 10 seconds.",
-        "bms_scan_interval_too_short": "BMS Scan interval is too short. Minimum 60 seconds."
-      }
+    "error": {
+      "cannot_connect": "Failed to connect",
+      "invalid_port": "Invalid port number",
+      "invalid_host": "Invalid host address",
+      "unknown": "An unknown error occurred",
+      "scan_interval_too_short": "Scan interval is too short. Minimum 10 seconds.",
+      "bms_scan_interval_too_short": "BMS Scan interval is too short. Minimum 60 seconds.",
+      "log_scan_interval_too_short": "Log Scan interval is too short. Minimum 120 seconds."
+    },
+    "abort": {
+      "already_configured": "This BYD Battery Box is already configured"
     }
   }
+}

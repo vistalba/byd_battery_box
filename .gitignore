@@ -17,3 +17,11 @@ Thumbs.db
 
 # Claude Code
 .claude/
+# Runtime data (legacy log folder, coverage, venv)
+custom_components/byd_battery_box/logs/
+.venv/
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

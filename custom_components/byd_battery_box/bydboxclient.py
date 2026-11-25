@@ -1,15 +1,12 @@
-#import os, sys; sys.path.append(os.path.dirname(os.path.realpath(__file__)))
-
 """BYD Battery Box Class"""
 
 import asyncio
 import binascii
-import csv
 import json
 import logging
-import os
 import time
 from datetime import datetime
+from typing import Any
 
 from .bydbox_const import (
     APPLICATION_LIST,
@@ -42,31 +39,26 @@ _LOGGER = logging.getLogger(__name__)
 class BydBoxClient(ExtModbusClient):
     """Async Modbus Client for BYD Battery Box"""
 
-    initialized = False
-
-    _bms_qty = 0
-    _modules = 0
-    _cells = 0 # number of cells per module
-    _temps = 0 # number of temp sensors per module
-    _bat_type = ''
-    _new_logs = {}
-    _b_cells_total = {}
     _min_response_delay = 0.2 # minimum delayin s after write register
     _retry_delay = 0.2
-
-    data = {}
-    log = {}
 
     def __init__(self, host: str, port: int, unit_id: int, timeout: int) -> None:
         """Init Class"""
         super().__init__(host = host, port = port, unit_id=unit_id, timeout=timeout, framer='rtu')
 
-        self.data['unit_id'] = unit_id
+        # All state is per instance. (Class level mutable attributes were shared
+        # between all instances, e.g. between a running entry and the config flow.)
+        self.initialized = False
+        self._bms_qty = 0
+        self._modules = 0
+        self._cells = 0 # number of cells per module
+        self._temps = 0 # number of temp sensors per module
+        self._bat_type = ''
+        self._new_logs: dict[str, dict[str, Any]] = {}
+        self.data: dict[str, Any] = {}
+        self.log: dict[str, dict[str, Any]] = {}
 
-        self._log_path = './custom_components/byd_battery_box/logs/'
-        self._log_csv_path = self._log_path + 'byd_log.csv'
-        self._log_txt_path = self._log_path + 'byd.log'
-        self._log_json_path = self._log_path + 'byd_log.json'
+        self.data['unit_id'] = unit_id
 
         # Initialize connection health monitor
         self.health_monitor = self.ConnectionHealthMonitor(self)
@@ -80,27 +72,26 @@ class BydBoxClient(ExtModbusClient):
 
         return {
             'connection_quality': round(self.health_monitor.connection_quality * 100, 1),
-            'last_latency': round(self.health_monitor.last_latency, 3) if self.health_monitor.last_latency else None,
-            'avg_latency': round(self.health_monitor.avg_latency, 3) if self.health_monitor.avg_latency else None,
+            # latencies are measured in seconds, the sensors report milliseconds
+            'last_latency': round(self.health_monitor.last_latency * 1000, 1) if self.health_monitor.last_latency is not None else None,
+            'avg_latency': round(self.health_monitor.avg_latency * 1000, 1) if self.health_monitor.avg_latency is not None else None,
             'consecutive_failures': self.health_monitor.consecutive_failures,
             'last_success': self.health_monitor.last_success.isoformat() if self.health_monitor.last_success else None,
             'connection_health': 'healthy' if health_status else 'unhealthy'
         }
 
     class ClientBusyLock:
-        """Async context manager for managing client busy state."""
+        """Async context manager serializing Modbus operations (asyncio.Lock based)."""
 
         def __init__(self, client):
             self.client = client
 
         async def __aenter__(self):
-            while self.client.busy:
-                await asyncio.sleep(0.1)
-            self.client.busy = True
+            await self.client._lock.acquire()
             return self
 
         async def __aexit__(self, exc_type, exc_val, exc_tb):
-            self.client.busy = False
+            self.client._lock.release()
 
     class ConnectionHealthMonitor:
         """Monitors connection health metrics and quality."""
@@ -144,7 +135,7 @@ class BydBoxClient(ExtModbusClient):
                         # Calculate quality score (inverse relationship with latency)
                         self.connection_quality = max(0.0, min(1.0, 2.0 / (1.0 + latency)))
 
-                        self.last_success = datetime.now()
+                        self.last_success = datetime.now().astimezone()
                         self.consecutive_failures = 0
                         return latency
                 except Exception as e:
@@ -204,41 +195,16 @@ class BydBoxClient(ExtModbusClient):
             _LOGGER.debug("init done.")
             return True
 
-    def update_log_from_file(self) -> bool:
-        if not os.path.exists(self._log_path):
-            try:
-                os.makedirs(self._log_path, exist_ok=True)
-                _LOGGER.warning(f"log did not exist, created new log folder: {self._log_path}")
-                return False
-            except Exception:
-                _LOGGER.error(f'Failed to create log folder {self._log_path}')
-                return False
-
-        if os.path.isfile(self._log_json_path):
-            try:
-                with open(self._log_json_path) as openfile:
-                    # Reading from json file
-                    log = json.load(openfile)
-            except Exception as e:
-                _LOGGER.debug(f"Failed loading json log file {e}")
-                return False
-            #self.save_log_txt_file(log, append=False)
-            self.log = log
-            self.data['log_entries'] = len(self.log)
-            self.data['log'] = self.get_log_list(20)
-            self._update_balancing_cells_totals()
-            self.save_log_csv_file()
-            _LOGGER.debug(f"log entries loaded: {len(log)}")
-
-            #TODO update last_log per unit
-            # last_log = logs[-1]
-            # log = {'ts': ts.timestamp(), 'u': unit_id, 'c': code, 'data': hexdata}
-            # last_log_id = self._get_unit_log_sensor_id(0)
-            # code_desc = self._get_log_code_desc(unit_id, code)
-            # self.data[last_log_id] = f'{ts.strftime("%m/%d/%Y, %H:%M:%S")} {code} {code_desc}'
-            return True
-
-        return False
+    def load_log(self, log: dict[str, dict[str, Any]]) -> bool:
+        """Load previously stored log entries."""
+        if not log:
+            return False
+        self.log = dict(log)
+        self.data['log_entries'] = len(self.log)
+        self.data['log'] = self.get_log_list(20)
+        self._update_balancing_cells_totals()
+        _LOGGER.debug("log entries loaded: %s", len(self.log))
+        return True
 
     async def update_all_bms_status_data(self) -> bool:
         async with self.ClientBusyLock(self):
@@ -254,6 +220,16 @@ class BydBoxClient(ExtModbusClient):
                     #_LOGGER.debug(f"Failed updating data BMS status data {bms_id}", exc_info=True)
                     return False
             return True
+
+    async def update_log_history(self, unit_id: int, log_depth: int) -> bool:
+        """Read log history of one unit (serialized with all other Modbus operations)."""
+        async with self.ClientBusyLock(self):
+            self._new_logs = {}
+            result = await self.update_log_data(unit_id, log_depth=log_depth)
+        self.data['log'] = self.get_log_list(20)
+        self._update_balancing_cells_totals()
+        self.data['log_entries'] = len(self.log)
+        return result
 
     async def update_all_log_data(self) -> bool:
         async with self.ClientBusyLock(self):
@@ -368,6 +344,7 @@ class BydBoxClient(ExtModbusClient):
             towers += 1 # start counting at 0?
             _LOGGER.warning(f'LV towers set to {towers}, BMU reported {towers-1}.')
         else:
+            bat_type = ''
             _LOGGER.error(f'Battery type HV/LV could not be determined. SN starts wtih: {bmuSerial[:4]} ')
 
         bmu_v_A = f'{bmu_v_A_1}.{bmu_v_A_2}'
@@ -439,8 +416,8 @@ class BydBoxClient(ExtModbusClient):
         self.data['inverter'] = self._get_inverter_model(model, inverter_id)
         self.data['model'] = model
         self.data['capacity'] = capacity
-        self.data['sensors_t'] = self._cells
-        self.data['cells'] = self._temps
+        self.data['sensors_t'] = self._temps
+        self.data['cells'] = self._cells
 
         return True
 
@@ -472,7 +449,7 @@ class BydBoxClient(ExtModbusClient):
             discharge_lfte = self.convert_from_registers(regs[19:21], data_type = self._client.DATATYPE.UINT32, word_order='little') * 0.1
 
             param_t_v = f"{param_t_v1}.{param_t_v2}"
-            efficiency = round((discharge_lfte / charge_lfte) * 100.0,1)
+            efficiency = round((discharge_lfte / charge_lfte) * 100.0,1) if charge_lfte else None
 
             self.data['soc'] = soc
             self.data['max_cell_v'] = max_cell_voltage
@@ -490,7 +467,7 @@ class BydBoxClient(ExtModbusClient):
             self.data['charge_lfte'] = charge_lfte
             self.data['discharge_lfte'] = discharge_lfte
             self.data['efficiency'] = efficiency
-            self.data['updated'] = datetime.now()
+            self.data['updated'] = datetime.now().astimezone()
 
             return True
 
@@ -604,10 +581,13 @@ class BydBoxClient(ExtModbusClient):
         #   if cell['f'] & 1 == 1:
         #      balancing_cells += 1
 
-        efficiency = round((discharge_lfte / charge_lfte) * 100.0, 1)
+        efficiency = round((discharge_lfte / charge_lfte) * 100.0, 1) if charge_lfte else None
 
+        if not all_cell_voltages:
+            _LOGGER.error(f"BMS {bms_id} no cell voltages available (modules: {self._modules} cells: {self._cells})")
+            return False
         avg_cell_voltage = round(sum(all_cell_voltages) / len(all_cell_voltages) * 0.001, 3)
-        avg_cell_temp = round(sum(all_cell_temps) / len(all_cell_temps),1)
+        avg_cell_temp = round(sum(all_cell_temps) / len(all_cell_temps),1) if all_cell_temps else None
         # Compute actual per-update extremes by iterating through all_cell_voltages (values are in mV)
         calc_max_c_v = round(max(all_cell_voltages) * 0.001, 3)
         calc_min_c_v = round(min(all_cell_voltages) * 0.001, 3)
@@ -615,7 +595,7 @@ class BydBoxClient(ExtModbusClient):
         warnings_list = self.bitmask_to_strings(warnings1, BMS_WARNINGS) + self.bitmask_to_strings(warnings2, BMS_WARNINGS) + self.bitmask_to_strings(warnings3, BMS_WARNINGS3)
         warnings = self.strings_to_string(strings=warnings_list, default='Normal', max_length=255)
 
-        updated = datetime.now()
+        updated = datetime.now().astimezone()
 
         self.data[f'bms{bms_id}_max_c_v'] = calc_max_c_v
         self.data[f'bms{bms_id}_min_c_v'] = calc_min_c_v
@@ -908,61 +888,29 @@ class BydBoxClient(ExtModbusClient):
             code_desc = self.get_value_from_dict(BMS_LOG_CODES, code, 'Not available')
         return code_desc
 
-    def save_log_entries(self, append=True, retention_days=30) -> None:
-        """Save log entries with configurable retention to prevent unlimited growth."""
-        # Apply retention policy - remove entries older than retention_days
-        cutoff_timestamp = datetime.now().timestamp() - (retention_days * 24 * 60 * 60)
-
-        # Filter logs to only keep entries within retention period
+    def apply_log_retention(self, retention_days: int = 30) -> int:
+        """Remove log entries older than retention_days; return number of removed entries."""
+        cutoff_timestamp = time.time() - (retention_days * 24 * 60 * 60)
         filtered_logs = {
             key: entry for key, entry in self.log.items()
             if entry['ts'] >= cutoff_timestamp
         }
-
-        # Log removal statistics
         removed_count = len(self.log) - len(filtered_logs)
         if removed_count > 0:
-            _LOGGER.info(f"Log retention: removed {removed_count} entries older than {retention_days} days")
-
-        # Update class log dictionary with filtered entries
+            _LOGGER.info("Log retention: removed %s entries older than %s days", removed_count, retention_days)
         self.log = dict(sorted(filtered_logs.items()))
+        self.data['log_entries'] = len(self.log)
+        return removed_count
 
-        # Save filtered logs to files (preserving exact existing format)
-        self.save_log_csv_file()
-        self.save_log_json_file()
-
-        _LOGGER.debug(f'Saved {len(self._new_logs)} new log entries. Total after retention: {len(self.log)}')
-        return True
-
-    def save_log_json_file(self) -> None:
-        #log_s = dict(sorted(log.items()))
-        with open(self._log_json_path, "w") as outfile:
-            json.dump(self.log, outfile, indent=1, sort_keys=False, default=str)
-
-    def save_log_txt_file(self, log:dict, append=True) -> None:
-        if append:
-            write_type = 'a'
-        else:
-            write_type = 'w'
-        with open(self._log_txt_path, write_type) as myfile:
-            for _k, entry in self.log.items():
-                unit_id, unit_name, ts, code, data  = self.split_log_entry(entry)
-                code_desc, decoded = self.decode_log_data(unit_id, ts, code, data)
-                detail = decoded['desc']
-                line = f'{ts.strftime("%Y%m%d %H:%M:%S")} {unit_name} {code} {code_desc} {detail}\n'
-                myfile.write(line)
-
-    def save_log_csv_file(self) -> None:
-        with open(self._log_csv_path, 'w', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow(['ts', 'unit','code','description','detail','data'])
-
-            for _k, entry in self.log.items():
-                unit_id, unit_name, ts, code, data  = self.split_log_entry(entry)
-                code_desc, decoded = self.decode_log_data(unit_id, ts, code, data)
-                detail = decoded['desc']
-                log_list = [ts.strftime("%Y%m%d %H:%M:%S"), unit_name, code, code_desc, detail, binascii.hexlify(data).decode('ascii')]
-                writer.writerow(log_list)
+    def get_log_csv_rows(self) -> list[list[Any]]:
+        """Return all log entries as CSV rows (including header)."""
+        rows: list[list[Any]] = [['ts', 'unit', 'code', 'description', 'detail', 'data']]
+        for _k, entry in self.log.items():
+            unit_id, unit_name, ts, code, data = self.split_log_entry(entry)
+            code_desc, decoded = self.decode_log_data(unit_id, ts, code, data)
+            detail = decoded['desc']
+            rows.append([ts.strftime("%Y%m%d %H:%M:%S"), unit_name, code, code_desc, detail, binascii.hexlify(data).decode('ascii')])
+        return rows
 
     def split_log_entry(self, log:dict):
         unit_id = int(log['u'])

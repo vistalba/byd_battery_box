@@ -4,25 +4,25 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timedelta
-from importlib.metadata import PackageNotFoundError, version
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import async_track_time_interval
-from packaging import version as pkg_version
 
 from .bydboxclient import BydBoxClient
 from .const import ATTR_MANUFACTURER, DEVICE_TYPES, DOMAIN
+from .log_store import BydLogStore
 
 _LOGGER = logging.getLogger(__name__)
 
 class Hub:
     """Hub for BYD Battery Box Interface"""
 
-    PYMODBUS_VERSION = '3.11.2'
-
-    def __init__(self, hass: HomeAssistant, name: str, host: str, port: int, unit_id: int, scan_interval: int, scan_interval_bms: int = 600, scan_interval_log: int = 600) -> None:
+    def __init__(self, hass: HomeAssistant, name: str, host: str, port: int, unit_id: int, scan_interval: int, scan_interval_bms: int = 600, scan_interval_log: int = 600, entry: ConfigEntry | None = None) -> None:
         """Init hub."""
         self._hass = hass
+        self._entry = entry
+        self._log_store = BydLogStore(hass, entry.entry_id, entry.title) if entry is not None else None
         self._name = name
         self._id = f'{name.lower()}_{host.lower().replace('.','')}'
         self._last_full_update = datetime(2000,1,1)
@@ -36,23 +36,9 @@ class Hub:
         self._scan_interval_log = timedelta(seconds=scan_interval_log)
         self._bydclient = BydBoxClient(host=host, port=port, unit_id=unit_id, timeout=max(3, (scan_interval - 1)))
         self.online = True
-        self._busy = False
+        self._lock = asyncio.Lock()
+        self._health_task: asyncio.Task | None = None
         self._update_log_history_depth = [0,0]
-
-    class BusyLock:
-        """Async context manager for managing busy state."""
-
-        def __init__(self, hub):
-            self.hub = hub
-
-        async def __aenter__(self):
-            while self.hub._busy:
-                await asyncio.sleep(0.1)
-            self.hub._busy = True
-            return self
-
-        async def __aexit__(self, exc_type, exc_val, exc_tb):
-            self.hub._busy = False
 
 
     @property
@@ -81,6 +67,11 @@ class Hub:
         }
 
     @property
+    def serial(self) -> str | None:
+        """Serial number of the BMU."""
+        return self._bydclient.data.get('serial') or None
+
+    @property
     def hub_id(self) -> str:
         """ID for hub."""
         return self._id
@@ -102,39 +93,31 @@ class Hub:
 
         if not self._entities:
             """stop the interval timer upon removal of last entity"""
-            self._unsub_interval_method()
+            if self._unsub_interval_method is not None:
+                self._unsub_interval_method()
             self._unsub_interval_method = None
-            asyncio.create_task(self.close())
 
     async def init_data(self, close = False):
-        async with self.BusyLock(self):
-            await self._hass.async_add_executor_job(self.check_pymodbus_version)
-            await self._hass.async_add_executor_job(self._bydclient.update_log_from_file)
+        async with self._lock:
+            if self._log_store is not None:
+                self._bydclient.load_log(await self._log_store.async_load())
             await self._bydclient.init_data(close = close)
-            # Start connection health monitoring
-            self._bydclient.health_monitor.start_monitoring()
+            # Start connection health monitoring; the task is bound to the config
+            # entry and cancelled automatically when the entry is unloaded.
+            if self._entry is not None and self._health_task is None:
+                self._health_task = self._entry.async_create_background_task(
+                    self._hass,
+                    self._bydclient.health_monitor.periodic_health_update(),
+                    f"{DOMAIN}_health_monitor",
+                )
             self._compute_delta_c_v()
             self.update_entities()
 
-    def check_pymodbus_version(self):
-        try:
-            current_version = version('pymodbus')
-        except PackageNotFoundError:
-            _LOGGER.error("pymodbus is not installed")
-            raise
-
-        try:
-            current = pkg_version.parse(current_version)
-            required = pkg_version.parse(self.PYMODBUS_VERSION)
-        except Exception as e:
-            _LOGGER.error(f"Error parsing pymodbus version string: {e}")
-            raise
-
-        if current < required:
-            raise Exception(f"pymodbus {current_version} found, please update to {self.PYMODBUS_VERSION} or higher")
-        elif current > required:
-            _LOGGER.warning(f"newer pymodbus {current_version} found")
-        _LOGGER.debug(f"pymodbus {current_version}")
+    async def _async_save_log(self) -> None:
+        """Persist log entries (retention applied)."""
+        self._bydclient.apply_log_retention()
+        if self._log_store is not None:
+            await self._log_store.async_save(self._bydclient.log, self._bydclient.get_log_csv_rows())
 
     async def async_update_data(self, _now: int | None = None) -> dict:
         """Time to update."""
@@ -145,7 +128,7 @@ class Hub:
             #_LOGGER.debug(f"Skip update give system a break ;-)")
             return
 
-        async with self.BusyLock(self):
+        async with self._lock:
             # update log history
             unit_id = self._update_log_history_depth[0]
             log_depth = self._update_log_history_depth[1]
@@ -153,7 +136,7 @@ class Hub:
                 prev_len_log = len(self._bydclient.log)
                 _LOGGER.warning(f"Started loading {DEVICE_TYPES[unit_id]} log history; all other data updates will be suspended!")
                 try:
-                    await self._bydclient.update_log_data(unit_id, log_depth=log_depth)
+                    await self._bydclient.update_log_history(unit_id, log_depth=log_depth)
                     self._last_log_update = datetime.now()
                     self._last_update = datetime.now()
                 except Exception as e:
@@ -161,7 +144,8 @@ class Hub:
                     return False
                 self._update_log_history_depth[1] = 0
                 if prev_len_log != len(self._bydclient.log):
-                    result : bool = await self._hass.async_add_executor_job(self._bydclient.save_log_entries)
+                    await self._async_save_log()
+                self.update_entities()
                 return True
 
             # update last log data
@@ -174,7 +158,7 @@ class Hub:
                 if result:
                     self.update_entities()
                     if prev_len_log != len(self._bydclient.log):
-                        result : bool = await self._hass.async_add_executor_job(self._bydclient.save_log_entries)
+                        await self._async_save_log()
                     _LOGGER.debug("updated log data")
                 else:
                     _LOGGER.error("update log data failed")
@@ -228,6 +212,12 @@ class Hub:
 
     async def close(self):
         """Disconnect client."""
+        if self._unsub_interval_method is not None:
+            self._unsub_interval_method()
+            self._unsub_interval_method = None
+        if self._health_task is not None:
+            self._health_task.cancel()
+            self._health_task = None
         await self._bydclient.health_monitor.stop_monitoring()
         self._bydclient.close()
         _LOGGER.debug("close hub")

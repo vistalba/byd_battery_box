@@ -1,5 +1,3 @@
-# import os, sys; sys.path.append(os.path.dirname(os.path.realpath(__file__)))
-
 """Extended Modbus Class"""
 
 import asyncio
@@ -29,10 +27,11 @@ except ImportError:
 _LOGGER = logging.getLogger(__name__)
 
 class ExtModbusClient:
-    busy = False
+    """Async Modbus TCP client with retry handling."""
 
     def __init__(self, host: str, port: int, unit_id: int, timeout: int, framer: str) -> None:
         """Init Class"""
+        self._lock = asyncio.Lock()
         self._host = host
         self._port = port
         self._unit_id = unit_id
@@ -65,6 +64,11 @@ class ExtModbusClient:
             _LOGGER.warning("Modbus client is not connected, reconnecting...", exc_info=True)
             return await self.connect()
         return self._client.connected
+
+    @property
+    def busy(self) -> bool:
+        """Return True while a Modbus operation is in progress."""
+        return self._lock.locked()
 
     @property
     def connected(self) -> bool:

@@ -1,5 +1,7 @@
 # BYD Battery Box - Home Assistant Custom Integration
 
+> Working conventions (quality scale, skills, checks, no breaking changes): see [`AGENTS.md`](AGENTS.md).
+
 ## Project Overview
 
 This is a **Home Assistant Custom Component** for monitoring BYD Battery Box energy storage systems (HVL, HVM, HVS, LVS series) via local **Modbus TCP** connection. It is distributed through **HACS** (Home Assistant Community Store).
@@ -39,12 +41,14 @@ byd_battery_box/
 │   ├── manifest.json                    # HA integration metadata (version, requirements)
 │   ├── translations/en.json             # UI strings (English)
 │   ├── client_test.py                   # Minimal test file
-│   └── logs/                            # Runtime log storage (JSON, CSV, TXT)
+│   └── log_store.py                     # Log persistence (HA Store + CSV export)
 ├── .github/workflows/
 │   └── ci.yaml                          # All CI: lint, syntax, HACS, hassfest, mypy, version bump & release
 ├── images/                              # README screenshots (BMU, BMS, cells, balancing)
 ├── pyproject.toml                       # ruff + mypy configuration
 ├── hacs.json                            # HACS distribution config
+├── AGENTS.md                            # How we work in this repo (quality scale, skills, checks)
+├── tests/                               # Test suite, BYD Modbus simulator & fixtures
 ├── README.md                            # User-facing documentation
 ├── LICENSE.md                           # Apache 2.0
 └── .gitignore                           # Ignores: __pycache__, .DS_Store, .codegpt
@@ -189,12 +193,12 @@ mypy custom_components/
 
 ## Log Data Storage
 
-Log data is persisted to `custom_components/byd_battery_box/logs/`:
-- `byd_logs.json` - Primary storage format
-- `byd_logs.csv` - Convenience export
-- `byd.log` - Text log
+Log entries are persisted with `homeassistant.helpers.storage.Store` (`log_store.py`):
+- `/config/.storage/byd_battery_box.<entry_id>.log` - primary storage (JSON)
+- `/config/byd_battery_box/<entry title>_log.csv` - convenience export
+- A legacy `custom_components/byd_battery_box/logs/byd_log.json` is migrated once on first load.
 
-The `logs/` directory is created at runtime. Log entries contain timestamp, unit, code, description, and detail fields.
+Log entries contain timestamp, unit, code and raw hex data; entries older than 30 days are removed.
 
 ## Development Notes
 
