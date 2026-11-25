@@ -1,3 +1,4 @@
+from typing import Any
 
 INVERTER_LIST = { 0: "Fronius HV",
                  1: "Goodwe HV/Viessmann HV",
@@ -60,7 +61,7 @@ APPLICATION_LIST = [ "Off Grid", "On Grid", "Backup" ]
 PHASE_LIST = [ "Single", "Three" ]
 WORKING_AREA = [ "B", "A", "B" ]
 
-MODULE_SPECS = {
+MODULE_SPECS: dict[str, dict[str, Any]] = {
     'LVL': {'capacity': 8.68, 'cells': 0, 'sensors_t': 0},
     'LVS': {'capacity': 4, 'cells': 16, 'sensors_t': 8},
     'HVL': {'capacity': 4, 'cells': 0, 'sensors_t': 0},
@@ -309,7 +310,7 @@ BMU_CALIBRATION = {
     2: 'internet'
 }
 
-DATA_POINTS = {
+DATA_POINTS: dict[str, dict[str, str]] = {
     'b_cells': {'label':'Balancing cells', 'type':'nlist', 'unit':''},
     'c_max_v': {'label':'Cell max voltage', 'type':'n', 'unit':'mV'},
     'c_min_v': {'label':'Cell min voltage', 'type':'n', 'unit':'mV'},

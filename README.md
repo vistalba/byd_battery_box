@@ -27,7 +27,7 @@ Home assistant Custom Component for reading data from BYD Battery Box system ser
 
 ## HACS (recommended) 
 
-This card is available in [HACS](https://hacs.xyz/) (Home Assistant Community Store).
+This integration is available in [HACS](https://hacs.xyz/) (Home Assistant Community Store).
 
 <small>*HACS is a third party community store and is not included in Home Assistant out of the box.*</small>
 
@@ -35,14 +35,61 @@ This card is available in [HACS](https://hacs.xyz/) (Home Assistant Community St
 
 ## Manual install
 
-1. Download and copy Installation to your home-assistant config/custom_components folder.
+1. Download the latest release and copy the folder `custom_components/byd_battery_box` to your Home Assistant `config/custom_components` folder.
+2. Restart Home Assistant.
+3. Add the integration via **Settings → Devices & services → Add integration → BYD Battery Box** (see *Configuration*).
 
-2. After reboot of Home-Assistant, this integration can be configured through the integration setup UI.
+# Supported devices
 
-# Data Updates
-The key BMU Status data will by default refreshed 30 seconds. 
+| Series | Type | Status |
+| --- | --- | --- |
+| Battery-Box Premium **HVS** | HV, modules in series | Supported |
+| Battery-Box Premium **HVM** | HV, modules in series | Supported |
+| Battery-Box Premium **HVL** | HV | Basic data (no cell data, model has no cell specification) |
+| Battery-Box Premium **LVS** | LV, modules in parallel | Supported |
+| LV Flex / LVS Lite / LVL | LV | Not tested, battery type might not be detected (`model` = `NA`) |
 
-Detailed BMS data will be refreshed by default every 10 minutes.
+Up to 3 towers (BMS) per BMU are supported. The integration talks to the **BMU** (Battery Management Unit) via Modbus TCP (Modbus RTU frames over TCP, default port `8080`).
+
+# Prerequisites
+
+- The BMU must be reachable from Home Assistant via **LAN cable** (the WiFi of the BMU switches off after a while).
+- Default IP address of the BMU: `192.168.16.254` (newer firmware also supports DHCP). A static route might be required.
+- The BMU accepts **only one Modbus connection**. Close BE Connect or other tools/integrations reading the battery, otherwise the setup fails or data is missing.
+
+# Configuration
+
+After installation go to **Settings → Devices & services → Add integration → BYD Battery Box**.
+
+| Field | Default | Description |
+| --- | --- | --- |
+| Name | `BYD Battery Box` | Name of the integration entry |
+| IP Address | – | IP address or host name of the BMU |
+| Port | `8080` | Modbus TCP port of the BMU |
+| Modbus Unit/Slave ID | `1` | Modbus unit id of the BMU |
+| Scan Interval BMU | `30` s (min. 10 s) | Main values (SOC, power, voltage, current, temperatures) |
+| Scan Interval BMS | `600` s (min. 60 s) | Detailed tower data (cell voltages, cell temperatures, balancing) |
+| Scan Interval log data | `600` s (min. 120 s) | New log entries |
+
+The connection is tested before the entry is created. A battery (serial number) can only be added once.
+
+## Options
+
+**Settings → Devices & services → BYD Battery Box → Configure** changes the three scan intervals. The integration reloads automatically.
+
+## Reconfigure
+
+**⋮ → Reconfigure** changes IP address, port and unit id without removing the integration (e.g. after the battery got a new IP address). The integration is stopped while the new settings are tested; if another battery answers (different serial number) the change is refused.
+
+# Data updates
+
+The integration polls the battery (local polling, no cloud):
+
+- **BMU status** every 30 s (configurable): SOC, SOH, power, current, voltages, temperatures, energy counters.
+- **BMS status** every 10 minutes (configurable): per tower cell voltages/temperatures, balancing, warnings, errors. Reading a tower takes a few seconds, therefore the longer interval.
+- **Log data** every 10 minutes (configurable). With the same interval the static data (number of towers, modules, model) is re-read; towers added later appear automatically.
+
+If the BMU does not answer 3 times in a row, the entities become *unavailable* (the connection health sensors stay available) and recover automatically when the battery answers again. Lost and restored connections are logged once.
 
 # Log data
 The log data is by default updated every 10 minutes. Log entries are stored in the Home Assistant storage (`/config/.storage/byd_battery_box.<entry_id>.log`) so they survive updates of the integration. For convenience a CSV export is written to `/config/byd_battery_box/<name>_log.csv` (e.g. `byd_battery_box_log.csv`). Entries older than 30 days are removed.
@@ -372,6 +419,88 @@ Temperatures Table
 
 ```
 
+
+# Use cases & examples
+
+- Monitor SOC, charge/discharge power and the energy counters in the **Energy dashboard** (`sensor.charge_total_energy`, `sensor.discharge_total_energy`).
+- Watch the cell balance of each tower (`sensor.bms_1_cells_voltage_delta`) and get notified when it drifts.
+- Get notified about warnings and errors of the BMU/BMS.
+
+Notify when the cell voltage delta of tower 1 is above 50 mV for one hour:
+
+```yaml
+automation:
+  - alias: "BYD cell delta high"
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.bms_1_cells_voltage_delta
+        above: 50
+        for: "01:00:00"
+    actions:
+      - action: notify.notify
+        data:
+          message: "BYD tower 1 cell delta is {{ states('sensor.bms_1_cells_voltage_delta') }} mV"
+```
+
+Notify on BMS warnings:
+
+```yaml
+automation:
+  - alias: "BYD BMS warning"
+    triggers:
+      - trigger: state
+        entity_id: sensor.bms_1_warnings
+    conditions:
+      - condition: template
+        value_template: "{{ trigger.to_state.state not in ['Normal', 'unavailable', 'unknown'] }}"
+    actions:
+      - action: notify.notify
+        data:
+          message: "BYD warning: {{ trigger.to_state.state }}"
+```
+
+# Diagnostics
+
+**Settings → Devices & services → BYD Battery Box → ⋮ → Download diagnostics** creates a file with the configuration, the current data and the connection health (IP address and serial number are redacted). Please attach it to issues.
+
+# Troubleshooting
+
+| Problem | Solution |
+| --- | --- |
+| *Failed to connect* during setup | Check IP address/port (`http://<ip>` should show the BMU login page), use a LAN cable, close BE Connect or other Modbus clients. |
+| Entities are *unavailable* | The BMU did not answer 3 times in a row. Check the connection health sensors and the network. Another Modbus client may block the single connection. |
+| Repair issue *configured more than once* | The same battery was added twice. Remove one of the entries. |
+| BMS values update rarely | BMS data is read every 10 minutes by default, change it in the options (min. 60 s). |
+| Log history incomplete | Use the *Update last … log entries* buttons; during the update all other updates are paused. |
+| Debug logging | Add `custom_components.byd_battery_box: debug` and `pymodbus: debug` to the [logger](https://www.home-assistant.io/integrations/logger/) configuration. |
+
+# Known limitations
+
+- Only one Modbus connection at a time is accepted by the BMU.
+- Read-only: no settings of the battery can be changed.
+- HVL and some LV models (LV Flex, LVS Lite) are not fully supported (no cell data / type detection).
+- Cell data of HVS modules (32 cells) is read with the 16-cell register layout of the known documentation.
+- Log entries older than 30 days are removed from the local storage.
+- The battery cannot be discovered automatically, the IP address has to be entered.
+
+# Removal
+
+1. **Settings → Devices & services → BYD Battery Box → ⋮ → Delete**.
+2. Optional: remove the integration in HACS (or delete `custom_components/byd_battery_box`) and restart Home Assistant.
+3. Optional: delete the CSV export folder `/config/byd_battery_box/`. The stored log entries in `.storage` are removed together with the integration entry.
+
+# Upgrade notes (quality rework)
+
+Existing installations keep their entity ids, history, statistics and attributes. Noticeable changes:
+
+- Unique ids are now based on the BMU serial number (migrated automatically) – several batteries can be added.
+- Entity names follow the Home Assistant naming (device name + entity name, e.g. *Battery Management Unit State of charge*). Entity ids are not changed.
+- Icons are provided via icon translations; the `icon` state attribute is no longer set.
+- Timestamps (`Updated` sensors) contain the time zone.
+- Fixed values: *Cells per module* / *Temperature sensors per module* were swapped, latency sensors now really report milliseconds.
+- Log storage moved from `custom_components/byd_battery_box/logs` (deleted by HACS updates) to `.storage` (see *Log data*).
+- New installations: rarely used entities (BMU version A/B, param table version, last latency, log history 500/1000/2000 buttons) are disabled by default.
+- Large attributes (cell voltages, temperatures, balancing, log list) are no longer written to the recorder database; they are still available as attributes.
 
 # Example Devices
 ![bmu](images/bmu.png?raw=true "bmu")

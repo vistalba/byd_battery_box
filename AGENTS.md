@@ -108,37 +108,53 @@ custom_components/byd_battery_box/
 ├── bydbox_const.py      # Hardware-Konstanten / Log-Codes
 ├── const.py             # HA-Konstanten
 ├── icons.json           # Icon-Übersetzungen
-├── strings.json         # Quelle der Übersetzungen (= translations/en.json)
-├── translations/        # en.json, de.json
+├── translations/        # en.json (Quelle), de.json (ohne Entity-Namen)
 └── quality_scale.yaml   # Stand der Quality-Scale-Regeln
 tests/                   # pytest-homeassistant-custom-component
-scripts/                 # Hilfsskripte (z. B. Modbus-Simulator)
+├── byd_simulator.py     # BYD-BMU-Simulator (Modbus RTU über TCP)
+└── fixtures/            # aufgezeichnete Logs + Golden-File der Log-Dekodierung
+scripts/client_test.py   # Daten ohne HA auslesen (Batterie oder Simulator)
 ```
-
-Hinweis: Die Struktur entsteht schrittweise über die Phasen-Branches
-(`claude/phase-1-…` bis `claude/phase-7-…`).
 
 ## 5. Entwicklungsumgebung & Checks
 
 ```bash
-python3 -m venv .venv && . .venv/bin/activate
+python3.13 -m venv .venv && . .venv/bin/activate
 pip install -r requirements_test.txt
+```
+
+Ohne Hardware testen – Simulator starten und in einer HA-Testinstanz die
+Integration mit der IP des Rechners hinzufügen:
+
+```bash
+python tests/byd_simulator.py --port 8080 --towers 2 --modules 3
+python scripts/client_test.py 127.0.0.1 --port 8080
 ```
 
 Vor jedem Commit lokal ausführen:
 
 ```bash
-ruff check custom_components/ tests/
+ruff check custom_components/ tests/ scripts/
 python -m py_compile custom_components/byd_battery_box/*.py
-mypy custom_components/
-pytest
+mypy                      # strict, Konfiguration in pyproject.toml
+pytest --cov              # > 95 % pro Modul
+```
+
+Hassfest lokal (optional, braucht einen Checkout von `home-assistant/core`
+in der zur Test-Version passenden Version):
+
+```bash
+python -m script.hassfest --integration-path custom_components/byd_battery_box
 ```
 
 - Tests liegen in `tests/` und nutzen einen simulierten Modbus-Client
   (keine Hardware nötig). Neue Features brauchen Tests.
 - Ziel-Testabdeckung: > 95 % pro Modul.
-- Übersetzungen: `strings.json` ist die Quelle; `translations/en.json` muss
-  identisch sein (Test prüft das).
+- Übersetzungen: `translations/en.json` ist die Quelle. `de.json` enthält alle
+  Texte ausser Entity-Namen (bestehende Namen bleiben englisch). Tests prüfen
+  Vollständigkeit, Platzhalter und Schweizer Schreibweise (kein «ß»).
+- Neue Entities: `EntityDescription` mit `translation_key`, Name in `en.json`,
+  Icon in `icons.json`, `legacy_name` nur für bestehende Entities (Entity-ID-Stabilität).
 
 ## 6. Versionierung & Release
 

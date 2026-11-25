@@ -1,14 +1,18 @@
 """Extended Modbus Class"""
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import operator
 import struct
-from typing import Literal
+from typing import Any, Literal
 
 from pymodbus import ExceptionResponse
 from pymodbus.client import AsyncModbusTcpClient
 from pymodbus.exceptions import ConnectionException, ModbusIOException
+from pymodbus.framer import FramerType
+from pymodbus.pdu import ModbusPDU
 
 try:
     # For pymodbus 3.13.x+
@@ -16,11 +20,11 @@ try:
 except ImportError:
     try:
         # For pymodbus 3.9.x-3.12.x
-        from pymodbus.pdu.pdu import unpack_bitstring
+        from pymodbus.pdu.pdu import unpack_bitstring  # type: ignore[attr-defined,no-redef]
     except ImportError:
         try:
             # For pymodbus 3.8.x and below
-            from pymodbus.utilities import unpack_bitstring
+            from pymodbus.utilities import unpack_bitstring  # type: ignore[attr-defined,no-redef]
         except ImportError as exc:
             raise ImportError("cannot import unpack_bitstring from pymodbus") from exc
 
@@ -35,14 +39,14 @@ class ExtModbusClient:
         self._host = host
         self._port = port
         self._unit_id = unit_id
-        self._client = AsyncModbusTcpClient(host=host, port=port, framer=framer, timeout=timeout)
+        self._client = AsyncModbusTcpClient(host=host, port=port, framer=FramerType(framer), timeout=timeout)
         _LOGGER.debug(f'client timeout {timeout}')
 
-    def close(self):
+    def close(self) -> None:
         """Disconnect client."""
         self._client.close()
 
-    async def connect(self, retries=3):
+    async def connect(self, retries: int = 3) -> bool:
         """Connect client."""
         for attempts in range(retries):
             if attempts > 0:
@@ -59,7 +63,7 @@ class ExtModbusClient:
         _LOGGER.debug("successfully connected to %s:%s", self._client.comm_params.host, self._client.comm_params.port)
         return True
 
-    async def _check_and_reconnect(self):
+    async def _check_and_reconnect(self) -> bool:
         if not self._client.connected:
             _LOGGER.debug("Modbus client is not connected, reconnecting...")
             return await self.connect()
@@ -74,7 +78,7 @@ class ExtModbusClient:
     def connected(self) -> bool:
         return self._client.connected
 
-    def validate(self, value, comparison, against):
+    def validate(self, value: Any, comparison: str, against: Any) -> Any:
         ops = {
             ">": operator.gt,
             "<": operator.lt,
@@ -87,7 +91,7 @@ class ExtModbusClient:
             raise ValueError(f"Value {value} failed validation ({comparison}{against})")
         return value
 
-    async def read_holding_registers(self, unit_id, address, count, retries=3):
+    async def read_holding_registers(self, unit_id: int, address: int, count: int, retries: int = 3) -> ModbusPDU | None:
         """Read holding registers."""
         # _LOGGER.debug(f"read registers a: {address} s: {unit_id} c {count} {self._client.connected}")
         await self._check_and_reconnect()
@@ -131,11 +135,11 @@ class ExtModbusClient:
 
         return data
 
-    async def get_registers(self, address, count):
+    async def get_registers(self, address: int, count: int) -> list[int] | None:
         data = await self.read_holding_registers(unit_id=self._unit_id, address=address, count=count)
 
         if data is not None and len(data.registers) > 0:
-            return data.registers
+            return list(data.registers)
 
         # some error happened return None
         if data is not None and len(data.registers) == 0:
@@ -143,7 +147,7 @@ class ExtModbusClient:
 
         return None
 
-    async def write_registers(self, unit_id, address, payload):
+    async def write_registers(self, unit_id: int, address: int, payload: list[int]) -> ModbusPDU:
         """Write registers."""
         # _LOGGER.debug(f"write registers a: {address} p: {payload}")
         await self._check_and_reconnect()
@@ -163,24 +167,24 @@ class ExtModbusClient:
         # _LOGGER.debug(f'write result {type(result)} {result}')
         return result
 
-    def calculate_value(self, value, sf, digits=2):
-        return round(value * 10 ** sf, digits)
+    def calculate_value(self, value: float, sf: int, digits: int = 2) -> float:
+        return float(round(value * 10 ** sf, digits))
 
-    def strip_escapes(self, value: str):
+    def strip_escapes(self, value: str | None) -> str | None:
         if value is None:
-            return
+            return None
         filter = ''.join([chr(i) for i in range(0, 32)])
         return value.translate(str.maketrans('', '', filter)).strip()
 
-    def convert_from_registers_int8(self, regs):
+    def convert_from_registers_int8(self, regs: list[int]) -> list[int]:
         return [int(regs[0] >> 8), int(regs[0] & 0xFF)]
 
-    def convert_from_registers_int4(self, regs):
+    def convert_from_registers_int4(self, regs: list[int]) -> list[int]:
         result = [int(regs[0] >> 4) & 0x0F, int(regs[0] & 0x0F)]
         return result
 
     def convert_from_registers(
-            cls, registers: list[int], data_type: AsyncModbusTcpClient.DATATYPE,
+            self, registers: list[int], data_type: AsyncModbusTcpClient.DATATYPE,
             word_order: Literal["big", "little"] = "big"
     ) -> int | float | str | list[bool] | list[int] | list[float]:
         """Convert registers to int/float/str.
@@ -205,7 +209,7 @@ class ExtModbusClient:
                     trailing_nulls_begin -= 1
                 byte_list = byte_list[:trailing_nulls_begin]
                 return byte_list.decode("utf-8")
-            return unpack_bitstring(byte_list)
+            return unpack_bitstring(bytes(byte_list))
         if (reg_len := len(registers)) % data_len:
             raise Exception(
                 f"Registers illegal size ({len(registers)}) expected multiple of {data_len}!"
@@ -222,13 +226,29 @@ class ExtModbusClient:
             result.append(struct.unpack(f">{data_type.value[0]}", byte_list)[0])
         return result if len(result) != 1 else result[0]
 
-    def get_value_from_dict(self, d, k, default='NA'):
+    def reg_u16(self, regs: list[int]) -> int:
+        """Convert one register to an unsigned 16 bit integer."""
+        return int(self._client.convert_from_registers(regs, data_type=self._client.DATATYPE.UINT16))  # type: ignore[arg-type]
+
+    def reg_i16(self, regs: list[int]) -> int:
+        """Convert one register to a signed 16 bit integer."""
+        return int(self._client.convert_from_registers(regs, data_type=self._client.DATATYPE.INT16))  # type: ignore[arg-type]
+
+    def reg_str(self, regs: list[int]) -> str:
+        """Convert registers to a string."""
+        return str(self._client.convert_from_registers(regs, data_type=self._client.DATATYPE.STRING))
+
+    def reg_u32_le(self, regs: list[int]) -> int:
+        """Convert two registers (little word order) to an unsigned 32 bit integer."""
+        return int(self.convert_from_registers(regs, data_type=self._client.DATATYPE.UINT32, word_order="little"))  # type: ignore[arg-type]
+
+    def get_value_from_dict(self, d: dict[Any, Any], k: Any, default: str = 'NA') -> Any:
         v = d.get(k)
         if v is not None:
             return v
         return f'{default}'
 
-    def convert_from_byte_uint16(self, byteArray, pos, type='BE'):
+    def convert_from_byte_uint16(self, byteArray: bytes | bytearray, pos: int, type: str = 'BE') -> int:
         try:
             if type == 'BE':
                 result = byteArray[pos] * 256 + byteArray[pos + 1]
@@ -238,7 +258,7 @@ class ExtModbusClient:
             return 0
         return result
 
-    def convert_from_byte_int16(self, byteArray, pos, type='BE'):
+    def convert_from_byte_int16(self, byteArray: bytes | bytearray, pos: int, type: str = 'BE') -> int:
         try:
             if type == 'BE':
                 result = byteArray[pos] * 256 + byteArray[pos + 1]
@@ -250,7 +270,7 @@ class ExtModbusClient:
             return 0
         return result
 
-    def bitmask_to_strings(self, bitmask, bitmask_dict: dict, bits=16):
+    def bitmask_to_strings(self, bitmask: int, bitmask_dict: dict[int, str], bits: int = 16) -> list[str]:
         strings = []
         for bit in range(bits):
             if bitmask & (1 << bit):
@@ -260,11 +280,11 @@ class ExtModbusClient:
                 strings.append(value)
         return strings
 
-    def bitmask_to_string(self, bitmask, bitmask_dict, default='NA', max_length=255, bits=16):
+    def bitmask_to_string(self, bitmask: int, bitmask_dict: dict[int, str], default: str = 'NA', max_length: int = 255, bits: int = 16) -> str:
         strings = self.bitmask_to_strings(bitmask=bitmask, bitmask_dict=bitmask_dict, bits=bits)
         return self.strings_to_string(strings=strings, default=default, max_length=max_length)
 
-    def strings_to_string(self, strings, default='NA', max_length=255):
+    def strings_to_string(self, strings: list[str], default: str = 'NA', max_length: int = 255) -> str:
         if len(strings):
             return ','.join(strings)[:max_length]
         return default

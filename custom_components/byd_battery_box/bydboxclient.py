@@ -1,5 +1,7 @@
 """BYD Battery Box Class"""
 
+from __future__ import annotations
+
 import asyncio
 import binascii
 import json
@@ -71,7 +73,7 @@ class BydBoxClient(ExtModbusClient):
         # Initialize connection health monitor
         self.health_monitor = self.ConnectionHealthMonitor(self)
 
-    def get_connection_metrics(self):
+    def get_connection_metrics(self) -> dict[str, Any]:
         """Return current connection health data for HA sensor."""
         # Note: This is called synchronously, so we return current state without running async health check
         health_status = (self.health_monitor.last_success is not None and
@@ -91,28 +93,28 @@ class BydBoxClient(ExtModbusClient):
     class ClientBusyLock:
         """Async context manager serializing Modbus operations (asyncio.Lock based)."""
 
-        def __init__(self, client):
+        def __init__(self, client: BydBoxClient) -> None:
             self.client = client
 
-        async def __aenter__(self):
+        async def __aenter__(self) -> BydBoxClient.ClientBusyLock:
             await self.client._lock.acquire()
             return self
 
-        async def __aexit__(self, exc_type, exc_val, exc_tb):
+        async def __aexit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
             self.client._lock.release()
 
     class ConnectionHealthMonitor:
         """Monitors connection health metrics and quality."""
 
-        def __init__(self, client, update_interval=60):
+        def __init__(self, client: BydBoxClient, update_interval: float = 60) -> None:
             self.client = client
-            self.last_latency = None
-            self.avg_latency = None
+            self.last_latency: float | None = None
+            self.avg_latency: float | None = None
             self.connection_quality = 1.0  # 0.0 to 1.0
-            self.last_success = None
+            self.last_success: datetime | None = None
             self.consecutive_failures = 0
             self.update_interval = update_interval
-            self._monitor_task = None
+            self._monitor_task: asyncio.Task[None] | None = None
 
         async def measure_latency(self) -> float | None:
             # Skip if client is busy with a data update — health checks
@@ -158,19 +160,19 @@ class BydBoxClient(ExtModbusClient):
             return (latency is not None and latency < 5.0 and
                     self.consecutive_failures < 3)
 
-        async def periodic_health_update(self):
+        async def periodic_health_update(self) -> None:
             """Run health checks periodically"""
             while True:
                 await self.measure_latency()
                 await asyncio.sleep(self.update_interval)
 
-        def start_monitoring(self):
+        def start_monitoring(self) -> None:
             """Start the background monitoring task"""
             if self._monitor_task is None or self._monitor_task.done():
                 self._monitor_task = asyncio.create_task(self.periodic_health_update())
                 _LOGGER.debug("Connection health monitoring started")
 
-        async def stop_monitoring(self):
+        async def stop_monitoring(self) -> None:
             """Stop the background monitoring task"""
             if self._monitor_task and not self._monitor_task.done():
                 self._monitor_task.cancel()
@@ -182,7 +184,7 @@ class BydBoxClient(ExtModbusClient):
                     self._monitor_task = None
                 _LOGGER.debug("Connection health monitoring stopped")
 
-    async def init_data(self, close = False) -> bool:
+    async def init_data(self, close: bool = False) -> bool:
         async with self.ClientBusyLock(self):
             if not self._client.connected:
                 await self._client.connect()
@@ -269,7 +271,7 @@ class BydBoxClient(ExtModbusClient):
                 # skip until logs are available
                 return
             balancing_total = [0, 0, 0, 0]
-            b_cells_total = {}
+            b_cells_total: dict[int, dict[str, int]] = {}
             for _k, log in self.log.items():
                 if log['c'] == 17:
                     ts = datetime.fromtimestamp(log['ts'])
@@ -279,9 +281,7 @@ class BydBoxClient(ExtModbusClient):
                     if not (1 <= unit_id < len(balancing_total)):
                         continue
                     balancing_total[unit_id] += 1
-                    unit_b_cells_total = {}
-                    if unit_id in b_cells_total:
-                        unit_b_cells_total = b_cells_total.get(unit_id)
+                    unit_b_cells_total: dict[str, int] = b_cells_total.get(unit_id, {})
                     for cell_id in b_cells:
                         if cell_id in unit_b_cells_total:
                             unit_b_cells_total[cell_id] += 1
@@ -291,8 +291,9 @@ class BydBoxClient(ExtModbusClient):
 
             for bms_id in range(1, self._bms_qty + 1):
                 r = None
-                if b_cells_total.get(bms_id) is not None:
-                    r = self._get_balancings_totals_per_module(b_cells_total.get(bms_id))
+                bms_cells_total = b_cells_total.get(bms_id)
+                if bms_cells_total is not None:
+                    r = self._get_balancings_totals_per_module(bms_cells_total)
                 self.data[f'bms{bms_id}_b_total'] = balancing_total[bms_id]
                 self.data[f'bms{bms_id}_b_cells_total'] = r
         except Exception as e:
@@ -300,7 +301,7 @@ class BydBoxClient(ExtModbusClient):
         #_LOGGER.debug(f'balancing {balancing_total[1]} {self._b_cells_total.get(1)}')
         #_LOGGER.debug(f'balancing {balancing_total[2]} {self._b_cells_total.get(2)}')
 
-    def _get_balancings_totals_per_module(self, t) -> list:
+    def _get_balancings_totals_per_module(self, t: dict[str, int]) -> list[dict[str, Any]]:
         r = []
         for m in range(self._modules):
             mct = []
@@ -312,7 +313,7 @@ class BydBoxClient(ExtModbusClient):
             r.append({'m': m, 'bct':mct})
         return r
 
-    def _get_inverter_model(self,model,id) -> str:
+    def _get_inverter_model(self, model: str, id: int) -> str:
         inverter = None
         if model == "LVS":
           inverter = LVS_INVERTER_LIST.get(id)
@@ -336,7 +337,7 @@ class BydBoxClient(ExtModbusClient):
         if regs is None:
             return False
 
-        bmuSerial = self._client.convert_from_registers(regs[0:10], data_type = self._client.DATATYPE.STRING)[:-1]
+        bmuSerial = self.reg_str(regs[0:10])[:-1]
         # 10-12 ?
         _LOGGER.debug(f'bmu reg 10-12: {regs[10:12]}')
         bmu_v_A_1, bmu_v_A_2 = self.convert_from_registers_int8(regs[12:13])
@@ -446,24 +447,24 @@ class BydBoxClient(ExtModbusClient):
                 _LOGGER.debug('update_bmu_status_data regs is None')
                 return False
 
-            soc = self._client.convert_from_registers(regs[0:1], data_type = self._client.DATATYPE.UINT16)
-            max_cell_voltage = round(self._client.convert_from_registers(regs[1:2], data_type = self._client.DATATYPE.UINT16) * 0.01,2)
-            min_cell_voltage = round(self._client.convert_from_registers(regs[2:3], data_type = self._client.DATATYPE.UINT16) * 0.01,2)
-            soh = self._client.convert_from_registers(regs[3:4], data_type = self._client.DATATYPE.UINT16)
-            current = round(self._client.convert_from_registers(regs[4:5], data_type = self._client.DATATYPE.INT16) * 0.1,1)
-            bat_voltage = round(self._client.convert_from_registers(regs[5:6], data_type = self._client.DATATYPE.UINT16) * 0.01,2)
-            max_cell_temp = self._client.convert_from_registers(regs[6:7], data_type = self._client.DATATYPE.INT16)
-            min_cell_temp = self._client.convert_from_registers(regs[7:8], data_type = self._client.DATATYPE.INT16)
-            bmu_temp = self._client.convert_from_registers(regs[8:9], data_type = self._client.DATATYPE.INT16)
+            soc = self.reg_u16(regs[0:1])
+            max_cell_voltage = round(self.reg_u16(regs[1:2]) * 0.01,2)
+            min_cell_voltage = round(self.reg_u16(regs[2:3]) * 0.01,2)
+            soh = self.reg_u16(regs[3:4])
+            current = round(self.reg_i16(regs[4:5]) * 0.1,1)
+            bat_voltage = round(self.reg_u16(regs[5:6]) * 0.01,2)
+            max_cell_temp = self.reg_i16(regs[6:7])
+            min_cell_temp = self.reg_i16(regs[7:8])
+            bmu_temp = self.reg_i16(regs[8:9])
             # 9-12 ?
             if regs[9:13] != [0, 792, 0, 0]:
                 _LOGGER.debug(f'bmu status reg 9-12: {regs[9:13]} [0, 792, 0, 0]')
-            errors = self._client.convert_from_registers(regs[13:14], data_type = self._client.DATATYPE.UINT16)
+            errors = self.reg_u16(regs[13:14])
             param_t_v1, param_t_v2 = self.convert_from_registers_int8(regs[14:15])
-            output_voltage = round(self._client.convert_from_registers(regs[16:17], data_type = self._client.DATATYPE.UINT16) * 0.01,2)
+            output_voltage = round(self.reg_u16(regs[16:17]) * 0.01,2)
             # TODO: change to use standard pymodbus function once HA has been upgraded to later version
-            charge_lfte = self.convert_from_registers(regs[17:19], data_type = self._client.DATATYPE.UINT32, word_order='little') * 0.1
-            discharge_lfte = self.convert_from_registers(regs[19:21], data_type = self._client.DATATYPE.UINT32, word_order='little') * 0.1
+            charge_lfte = self.reg_u32_le(regs[17:19]) * 0.1
+            discharge_lfte = self.reg_u32_le(regs[19:21]) * 0.1
 
             param_t_v = f"{param_t_v1}.{param_t_v2}"
             efficiency = round((discharge_lfte / charge_lfte) * 100.0,1) if charge_lfte else None
@@ -488,14 +489,14 @@ class BydBoxClient(ExtModbusClient):
 
             return True
 
-    async def update_bms_status_data(self, bms_id) -> bool:
+    async def update_bms_status_data(self, bms_id: int) -> bool:
         """start reading status data"""
 
         await self.write_registers(unit_id=self._unit_id, address=0x0550, payload=[bms_id,0x8100])
 
         response_reg = await self._wait_for_response(address = 0x0551)
         if not response_reg:
-            return None
+            return False
 
         regs = []
         for i in range(4):
@@ -511,20 +512,20 @@ class BydBoxClient(ExtModbusClient):
             return False
 
         # skip 1st register with length
-        max_voltage = round(self._client.convert_from_registers(regs[1:2], data_type = self._client.DATATYPE.INT16) * 0.001,3)
+        max_voltage = round(self.reg_i16(regs[1:2]) * 0.001,3)
         if max_voltage > 5:
             _LOGGER.error(f"BMS {bms_id} unexpected max voltage {max_voltage}", exc_info=True)
             return False
-        _ = round(self._client.convert_from_registers(regs[2:3], data_type = self._client.DATATYPE.INT16) * 0.001,3)  # min_voltage - parsed for register completeness
+        _ = round(self.reg_i16(regs[2:3]) * 0.001,3)  # min_voltage - parsed for register completeness
         max_voltage_cell_module, min_voltage_cell_module = self.convert_from_registers_int8(regs[3:4])
-        max_temp = self._client.convert_from_registers(regs[4:5], data_type = self._client.DATATYPE.INT16)
-        min_temp = self._client.convert_from_registers(regs[5:6], data_type = self._client.DATATYPE.INT16)
+        max_temp = self.reg_i16(regs[4:5])
+        min_temp = self.reg_i16(regs[5:6])
         max_temp_cell_module, min_temp_cell_module = self.convert_from_registers_int8(regs[6:7])
 
         cell_balancing = []
         balancing_cells = 0
         for m in range(self._modules):
-            flags = self._client.convert_from_registers(regs[7+m:7+m+1], data_type = self._client.DATATYPE.UINT16)
+            flags = self.reg_u16(regs[7+m:7+m+1])
             bl = []
             for bit in range(16):
                 #b = flags & (1>>bit)
@@ -535,14 +536,14 @@ class BydBoxClient(ExtModbusClient):
             cell_balancing.append({'m':m+1, 'b':bl})
 
         # TODO: change to use standard pymodbus function once HA has been upgraded to later version
-        charge_lfte = self.convert_from_registers(regs[15:17], data_type = self._client.DATATYPE.UINT32, word_order='little') * 0.001
-        discharge_lfte = self.convert_from_registers(regs[17:19], data_type = self._client.DATATYPE.UINT32, word_order='little') * 0.001
+        charge_lfte = self.reg_u32_le(regs[15:17]) * 0.001
+        discharge_lfte = self.reg_u32_le(regs[17:19]) * 0.001
         # 20 ?
         reg20 = self.convert_from_registers(regs[20:21], data_type = self._client.DATATYPE.UINT16)
         reg20a, reg20b = self.convert_from_registers_int8(regs[3:4])
         _LOGGER.debug(f'bms {bms_id} reg 20: uint16 {reg20} int8 a {reg20a} b {reg20b}')
 
-        bat_voltage = round(self._client.convert_from_registers(regs[21:22], data_type = self._client.DATATYPE.INT16) * 0.1,2)
+        bat_voltage = round(self.reg_i16(regs[21:22]) * 0.1,2)
         # 22 ?
         if regs[22] != 0:
             _LOGGER.debug(f'bms {bms_id} reg 22: {regs[22]} 0')
@@ -550,13 +551,13 @@ class BydBoxClient(ExtModbusClient):
         if regs[23] != 1560:
             _LOGGER.debug(f'bms {bms_id} reg 23: {regs[23]} 1560')
 
-        output_voltage = round(self._client.convert_from_registers(regs[24:25], data_type = self._client.DATATYPE.INT16) * 0.1,2)
-        soc = round(self._client.convert_from_registers(regs[25:26], data_type = self._client.DATATYPE.INT16) * 0.1,2)
-        soh = self._client.convert_from_registers(regs[26:27], data_type = self._client.DATATYPE.INT16)
-        current = round(self._client.convert_from_registers(regs[27:28], data_type = self._client.DATATYPE.INT16) * 0.1,2)
-        warnings1 = self._client.convert_from_registers(regs[28:29], data_type = self._client.DATATYPE.UINT16)
-        warnings2 = self._client.convert_from_registers(regs[29:30], data_type = self._client.DATATYPE.UINT16)
-        warnings3 = self._client.convert_from_registers(regs[30:31], data_type = self._client.DATATYPE.UINT16)
+        output_voltage = round(self.reg_i16(regs[24:25]) * 0.1,2)
+        soc = round(self.reg_i16(regs[25:26]) * 0.1,2)
+        soh = self.reg_i16(regs[26:27])
+        current = round(self.reg_i16(regs[27:28]) * 0.1,2)
+        warnings1 = self.reg_u16(regs[28:29])
+        warnings2 = self.reg_u16(regs[29:30])
+        warnings3 = self.reg_u16(regs[30:31])
         # 31-47 ?
         if regs[31:42] != [6659, 7683, 256, 20528, 13104, 21552, 12848, 23090, 12848, 14129, 12593]:
             _LOGGER.debug(f'bms {bms_id} reg 31-42: {regs[31:42]} [6659, 7683, 256, 20528, 13104, 21552, 12848, 23090, 12848, 14129, 12593, 13619, 12920, 30840, 30840, 270, 270]')
@@ -565,9 +566,9 @@ class BydBoxClient(ExtModbusClient):
         if regs[44:48] != [30840, 30840, 270, 270]:
             _LOGGER.debug(f'bms {bms_id} reg 44-48: {regs[44:48]} [30840, 30840, 270, 270]')
 
-        errors = self._client.convert_from_registers(regs[48:49], data_type = self._client.DATATYPE.UINT16)
+        errors = self.reg_u16(regs[48:49])
         all_cell_voltages = []
-        cell_voltages= [] # list of dict
+        cell_voltages: list[dict[str, Any]] = [] # list of dict
 
         regs_voltages = regs[49:65] + regs[66:130] + regs[131:180]
         regs_temps = regs[180:195] + regs[196:213]
@@ -582,7 +583,7 @@ class BydBoxClient(ExtModbusClient):
         for m in range(self._modules):
             values = []
             for i in range(self._cells):
-                 voltage = self._client.convert_from_registers(regs_voltages[i+m*16:i+m*16+1], data_type = self._client.DATATYPE.INT16)
+                 voltage = self.reg_i16(regs_voltages[i+m*16:i+m*16+1])
                  values.append(voltage)
             all_cell_voltages += values
             cell_voltages.append({'m':m+1, 'v':values})
@@ -656,9 +657,9 @@ class BydBoxClient(ExtModbusClient):
         # Per-cell history (mV): maintain element-wise max/min for each cell across updates
         max_hist_key = f'bms{bms_id}_cell_voltages_max_history'
         min_hist_key = f'bms{bms_id}_cell_voltages_min_history'
-        prev_max_hist = self.data.get(max_hist_key)
-        prev_min_hist = self.data.get(min_hist_key)
-        def same_shape(a, b):
+        prev_max_hist: Any = self.data.get(max_hist_key)
+        prev_min_hist: Any = self.data.get(min_hist_key)
+        def same_shape(a: Any, b: Any) -> bool:
             try:
                 if a is None or b is None:
                     return False
@@ -687,8 +688,8 @@ class BydBoxClient(ExtModbusClient):
                     cur_vals = mod.get('v') or []
                     pm = prev_max_hist[idx].get('v') or []
                     pn = prev_min_hist[idx].get('v') or []
-                    max_vals = []
-                    min_vals = []
+                    max_vals: list[int] = []
+                    min_vals: list[int] = []
                     for j in range(len(cur_vals)):
                         v = cur_vals[j]
                         max_prev = pm[j]
@@ -706,11 +707,11 @@ class BydBoxClient(ExtModbusClient):
 
         # Update history of per-cell min/max voltages (based on current cell_voltages in mV)
         # Initialize structures on first run to current values
-        def clone_cells(src):
+        def clone_cells(src: list[dict[str, Any]]) -> list[dict[str, Any]]:
             return [{'m': item['m'], 'v': list(item['v'])} for item in src]
 
         # Flatten helper to compute overall min/max state values in V
-        def flatten_values(cells):
+        def flatten_values(cells: list[dict[str, Any]]) -> list[int]:
             vals = []
             for item in cells:
                 vals.extend(item['v'])
@@ -728,10 +729,10 @@ class BydBoxClient(ExtModbusClient):
 
         # Update per-cell
         for mi, module in enumerate(cell_voltages):
-            cur_vals = module['v']
+            module_vals: list[int] = module['v']
             max_vals = self.data[max_hist_key_cells][mi]['v']
             min_vals = self.data[min_hist_key_cells][mi]['v']
-            for ci, mv in enumerate(cur_vals):
+            for ci, mv in enumerate(module_vals):
                 if mv > max_vals[ci]:
                     max_vals[ci] = mv
                 if mv < min_vals[ci]:
@@ -752,7 +753,7 @@ class BydBoxClient(ExtModbusClient):
 
         return True
 
-    async def update_log_data(self, unit_id, log_depth = 1) -> bool:
+    async def update_log_data(self, unit_id: int, log_depth: int = 1) -> bool:
         entries = 0
         if log_depth == 1:
             update_last = True
@@ -772,7 +773,7 @@ class BydBoxClient(ExtModbusClient):
             _LOGGER.warning(f'Finished updating {self._get_device_name(unit_id)} log; found {entries} log entries.')
         return True
 
-    async def _wait_for_response(self, address, ready_response = 0x8801):
+    async def _wait_for_response(self, address: int, ready_response: int = 0x8801) -> bool:
         response_reg = 0
         timeout = self._response_timeout
         dt = 0.0
@@ -802,7 +803,7 @@ class BydBoxClient(ExtModbusClient):
             _LOGGER.error(f"wait for response timeout. {address}", exc_info=True)
             return False
 
-    async def _read_log_data_unit(self, unit_id, update_last = True) -> int:
+    async def _read_log_data_unit(self, unit_id: int, update_last: bool = True) -> int | None:
         """start reading log data"""
         #_LOGGER.debug(f'start updating log data {self._get_device_name(unit_id)} update_last: {update_last}')
         try:
@@ -829,7 +830,6 @@ class BydBoxClient(ExtModbusClient):
             return None
 
         entries = 0
-        ts:datetime = None
         for i in range(0,20):
             sub_regs=regs[i*15:i*15+15]
 
@@ -860,7 +860,7 @@ class BydBoxClient(ExtModbusClient):
 
             try:
                 year += 2000
-                ts:datetime = datetime(year=year, month=month, day=day, hour=hour, minute=minute, second=second)
+                ts = datetime(year=year, month=month, day=day, hour=hour, minute=minute, second=second)
             except Exception as e:
                 _LOGGER.error(f'Failed to derive log timestamp entry: {i} {year}-{month}-{day} {hour}:{minute}:{second} code: {code} exception: {e}')
                 break
@@ -884,26 +884,26 @@ class BydBoxClient(ExtModbusClient):
 
         return entries
 
-    def _get_unit_log_sensor_id(self, unit_id) -> str:
+    def _get_unit_log_sensor_id(self, unit_id: int) -> str:
         if unit_id == 0:
             last_log_id = 'bmu_last_log'
         else:
             last_log_id = f'bms{unit_id}_last_log'
         return last_log_id
 
-    def _get_device_name(self, device_id) -> str:
+    def _get_device_name(self, device_id: int) -> str:
         if device_id == 0:
             unit = 'BMU'
         else:
             unit = f'BMS {device_id}'
         return unit
 
-    def _get_log_code_desc(self, unit_id, code)  -> str:
+    def _get_log_code_desc(self, unit_id: int, code: int) -> str:
         if unit_id == 0:
             code_desc = self.get_value_from_dict(BMU_LOG_CODES, code, 'Not available')
         else:
             code_desc = self.get_value_from_dict(BMS_LOG_CODES, code, 'Not available')
-        return code_desc
+        return str(code_desc)
 
     def apply_log_retention(self, retention_days: int = 30) -> int:
         """Remove log entries older than retention_days; return number of removed entries."""
@@ -929,7 +929,7 @@ class BydBoxClient(ExtModbusClient):
             rows.append([ts.strftime("%Y%m%d %H:%M:%S"), unit_name, code, code_desc, detail, binascii.hexlify(data).decode('ascii')])
         return rows
 
-    def split_log_entry(self, log:dict):
+    def split_log_entry(self, log: dict[str, Any]) -> tuple[int, str, datetime, int, bytearray]:
         unit_id = int(log['u'])
         unit_name = self._get_device_name(unit_id)
         code = int(log['c'])
@@ -938,7 +938,7 @@ class BydBoxClient(ExtModbusClient):
 
         return unit_id, unit_name, ts, code, data
 
-    def get_log_list(self, max_length) -> list:
+    def get_log_list(self, max_length: int) -> list[dict[str, Any]]:
         logs = sorted(self.log.items(), reverse=True)
         log_list = []
         for _k, log in logs[:max_length]:
@@ -951,7 +951,7 @@ class BydBoxClient(ExtModbusClient):
 
         return log_list
 
-    def decode_log_data(self, unit_id:int, ts:datetime, code:int, data:bytearray):
+    def decode_log_data(self, unit_id: int, ts: datetime, code: int, data: bytearray) -> tuple[str, dict[str, Any]]:
         decoded = {}
         if unit_id == 0:
             code_desc = self.get_value_from_dict(BMU_LOG_CODES, code, 'Not available')
@@ -967,8 +967,8 @@ class BydBoxClient(ExtModbusClient):
 
         return code_desc, decoded
 
-    def decode_bmu_log_data(self, ts:datetime, code:int, data:bytearray) -> dict:
-        datapoints = {}
+    def decode_bmu_log_data(self, ts: datetime, code: int, data: bytearray) -> dict[str, Any]:
+        datapoints: dict[str, Any] = {}
 
         if code == 0:
             datapoints['bootl'] = data[0]
@@ -1109,8 +1109,8 @@ class BydBoxClient(ExtModbusClient):
 
         return datapoints
 
-    def decode_bms_log_data(self, ts:datetime, code:int, data:bytearray) -> dict:
-        datapoints = {}
+    def decode_bms_log_data(self, ts: datetime, code: int, data: bytearray) -> dict[str, Any]:
+        datapoints: dict[str, Any] = {}
 
         if code == 0:
             datapoints['bootl'] = data[0]
@@ -1211,7 +1211,7 @@ class BydBoxClient(ExtModbusClient):
 
         return datapoints
 
-    def log_data_to_str(self, data) -> str:
+    def log_data_to_str(self, data: dict[str, Any]) -> str:
         strings = []
         for dp, v in data.items():
             dp_config = DATA_POINTS.get(dp)
@@ -1230,7 +1230,7 @@ class BydBoxClient(ExtModbusClient):
                     s = dp_config['label'].replace('{v}', f'{v}')
                 else: # 'n' numeric
                     s += f"{v}"
-                    unit = dp_config.get('unit')
+                    unit = dp_config.get('unit') or ''
                     if len(unit) > 0:
                         s += f" {unit}"
                 strings.append(s)

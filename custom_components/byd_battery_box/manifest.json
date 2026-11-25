@@ -11,6 +11,9 @@
   "integration_type": "hub",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/TimWeyand/byd_battery_box/issues",
+  "loggers": [
+    "pymodbus"
+  ],
   "requirements": [
     "pymodbus>=3.11.2"
   ],

@@ -7,8 +7,8 @@ rules:
     comment: The integration does not register service actions.
   appropriate-polling: done
   brands:
-    status: todo
-    comment: Logo and icon have to be added to the home-assistant/brands repository.
+    status: done
+    comment: custom_integrations/byd_battery_box in home-assistant/brands.
   common-modules: done
   config-flow: done
   config-flow-test-coverage: done
@@ -19,9 +19,9 @@ rules:
   docs-conditions:
     status: exempt
     comment: The integration does not provide conditions.
-  docs-high-level-description: todo
-  docs-installation-instructions: todo
-  docs-removal-instructions: todo
+  docs-high-level-description: done
+  docs-installation-instructions: done
+  docs-removal-instructions: done
   docs-triggers:
     status: exempt
     comment: The integration does not provide triggers.
@@ -40,8 +40,8 @@ rules:
     status: done
     comment: Button presses raise HomeAssistantError when the battery is not reachable.
   config-entry-unloading: done
-  docs-configuration-parameters: todo
-  docs-installation-parameters: todo
+  docs-configuration-parameters: done
+  docs-installation-parameters: done
   entity-unavailable: done
   integration-owner: done
   log-when-unavailable: done
@@ -60,13 +60,13 @@ rules:
   discovery-update-info:
     status: exempt
     comment: No discovery.
-  docs-data-update: todo
-  docs-examples: todo
-  docs-known-limitations: todo
-  docs-supported-devices: todo
-  docs-supported-functions: todo
-  docs-troubleshooting: todo
-  docs-use-cases: todo
+  docs-data-update: done
+  docs-examples: done
+  docs-known-limitations: done
+  docs-supported-devices: done
+  docs-supported-functions: done
+  docs-troubleshooting: done
+  docs-use-cases: done
   dynamic-devices:
     status: done
     comment: Towers added later are detected (static data re-read with the log interval) and their entities are added.
@@ -89,4 +89,6 @@ rules:
   inject-websession:
     status: exempt
     comment: The integration does not use HTTP.
-  strict-typing: todo
+  strict-typing:
+    status: done
+    comment: mypy --strict (blocking in CI).

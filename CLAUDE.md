@@ -18,7 +18,7 @@ This is a **Home Assistant Custom Component** for monitoring BYD Battery Box ene
 
 | Component | Version / Details |
 |---|---|
-| Python | 3.12+ |
+| Python | 3.13+ |
 | Home Assistant | >= 2025.9.0 (see `hacs.json`) |
 | pymodbus | >= 3.11.2 (see `manifest.json`) |
 | Communication | Modbus TCP, default port 8080 |
@@ -40,7 +40,10 @@ byd_battery_box/
 │   ├── extmodbusclient.py               # Base Modbus TCP client (pymodbus wrapper)
 │   ├── bydbox_const.py                  # Hardware constants, error/log code decoders
 │   ├── manifest.json                    # HA integration metadata (version, requirements)
-│   ├── translations/en.json             # UI strings (English)
+│   ├── diagnostics.py                   # Diagnostics download (redacted)
+│   ├── icons.json                       # Icon translations
+│   ├── quality_scale.yaml               # Quality scale status per rule
+│   ├── translations/                    # UI strings (en.json, de.json)
 │   └── log_store.py                     # Log persistence (HA Store + CSV export)
 ├── .github/workflows/
 │   └── ci.yaml                          # All CI: lint, syntax, HACS, hassfest, mypy, version bump & release
@@ -164,14 +167,15 @@ All CI/CD is consolidated in a single workflow: `.github/workflows/ci.yaml`
 | **Python Syntax Check** | Yes | `py_compile` on all `.py` files |
 | **HACS Validation** | Yes | Validates HACS metadata (`manifest.json`, `hacs.json`) |
 | **Hassfest Validation** | Yes | Validates Home Assistant integration manifest |
-| **MyPy Type Check** | No | Informational type checking (`continue-on-error: true`) |
+| **Tests (pytest)** | Yes | Test suite incl. BYD simulator, coverage >= 95 % |
+| **MyPy Type Check** | Yes | `mypy --strict` |
 | **Bandit Security Scan** | No | Security vulnerability scanning (`continue-on-error: true`) |
 
 ### Additional Job (on Push to main only)
 
 | Job | Depends on | Purpose |
 |---|---|---|
-| **Version Bump & Release** | lint, syntax-check, hacs-validation, hassfest | Bumps patch version, creates git tag, publishes GitHub Release with changelog |
+| **Version Bump & Release** | lint, syntax-check, tests, type-check, hacs-validation, hassfest | Bumps patch version, creates git tag, publishes GitHub Release with changelog |
 
 ### Important: Fork-specific Notes
 
@@ -197,9 +201,8 @@ python -m py_compile custom_components/byd_battery_box/*.py
 pip install -r requirements_test.txt
 pytest --cov
 
-# Type check (informational)
-pip install mypy
-mypy custom_components/
+# Type check (strict)
+mypy
 ```
 
 ## Log Data Storage
