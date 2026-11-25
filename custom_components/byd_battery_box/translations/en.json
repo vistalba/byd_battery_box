@@ -256,5 +256,25 @@
         "name": "Reset history cell voltage"
       }
     }
+  },
+  "exceptions": {
+    "cannot_connect": {
+      "message": "Unable to connect to the BYD Battery Box: {error}"
+    },
+    "update_failed": {
+      "message": "Reading the BMU status data failed {failures} times in a row"
+    },
+    "log_history_failed": {
+      "message": "Reading the {unit} log history failed: {error}"
+    },
+    "not_reachable": {
+      "message": "The BYD Battery Box is currently not reachable"
+    }
+  },
+  "issues": {
+    "duplicate_entry": {
+      "title": "BYD Battery Box configured more than once",
+      "description": "The battery with the serial number of the entry \"{title}\" is already configured in another entry. The BMU accepts only one Modbus connection, so both entries will disturb each other. Please remove one of the entries."
+    }
   }
 }

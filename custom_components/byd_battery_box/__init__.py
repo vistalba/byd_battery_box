@@ -8,9 +8,12 @@ from homeassistant.const import CONF_NAME, Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import issue_registry as ir
 
 from .const import DEFAULT_NAME, DOMAIN, LEGACY_UNIQUE_ID_PREFIX
 from .coordinator import BydBoxConfigEntry, BydBoxCoordinator
+from .entity import bms_identifier, bmu_identifier
+from .log_store import BydLogStore
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,13 +36,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: BydBoxConfigEntry) -> bo
 
 def _async_set_unique_id(hass: HomeAssistant, entry: BydBoxConfigEntry, serial: str | None) -> None:
     """Add the BMU serial as unique id to entries created before it was stored."""
-    if entry.unique_id is not None or not serial:
+    issue_id = f"duplicate_entry_{entry.entry_id}"
+    if not serial:
         return
     for other in hass.config_entries.async_entries(DOMAIN):
         if other.entry_id != entry.entry_id and other.unique_id == serial:
-            _LOGGER.warning("BYD Battery Box %s is configured more than once", serial)
+            _LOGGER.warning("BYD Battery Box %s is configured more than once", entry.title)
+            ir.async_create_issue(
+                hass,
+                DOMAIN,
+                issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="duplicate_entry",
+                translation_placeholders={"title": entry.title},
+            )
             return
-    hass.config_entries.async_update_entry(entry, unique_id=serial)
+    ir.async_delete_issue(hass, DOMAIN, issue_id)
+    if entry.unique_id is None:
+        hass.config_entries.async_update_entry(entry, unique_id=serial)
 
 
 @callback
@@ -77,6 +92,23 @@ def _async_migrate_registry(hass: HomeAssistant, entry: BydBoxConfigEntry, coord
             continue
         _LOGGER.debug("Migrating device identifier %s to %s", old, new)
         dev_reg.async_update_device(device.id, new_identifiers={(DOMAIN, new)})
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant, entry: BydBoxConfigEntry, device: dr.DeviceEntry
+) -> bool:
+    """Allow removing devices of towers that no longer exist."""
+    coordinator = entry.runtime_data
+    return not any(
+        identifier in device.identifiers
+        for identifier in (bmu_identifier(coordinator), *(bms_identifier(coordinator, i) for i in range(1, coordinator.towers + 1)))
+    )
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: BydBoxConfigEntry) -> None:
+    """Remove stored data and issues of a removed entry."""
+    ir.async_delete_issue(hass, DOMAIN, f"duplicate_entry_{entry.entry_id}")
+    await BydLogStore(hass, entry.entry_id, entry.title).async_remove()
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: BydBoxConfigEntry) -> bool:

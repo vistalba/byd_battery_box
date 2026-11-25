@@ -25,7 +25,7 @@ from homeassistant.const import (
     UnitOfTemperature,
     UnitOfTime,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.typing import StateType
@@ -68,13 +68,11 @@ VOLTAGE = {
     "device_class": SensorDeviceClass.VOLTAGE,
     "state_class": SensorStateClass.MEASUREMENT,
     "native_unit_of_measurement": UnitOfElectricPotential.VOLT,
-    "icon": "mdi:lightning-bolt",
 }
 TEMPERATURE = {
     "device_class": SensorDeviceClass.TEMPERATURE,
     "state_class": SensorStateClass.MEASUREMENT,
     "native_unit_of_measurement": UnitOfTemperature.CELSIUS,
-    "icon": "mdi:thermometer",
 }
 ENERGY_TOTAL = {
     "device_class": SensorDeviceClass.ENERGY,
@@ -85,18 +83,15 @@ CURRENT = {
     "device_class": SensorDeviceClass.CURRENT,
     "state_class": SensorStateClass.MEASUREMENT,
     "native_unit_of_measurement": UnitOfElectricCurrent.AMPERE,
-    "icon": "mdi:lightning-bolt",
 }
 SOC = {
     "device_class": SensorDeviceClass.BATTERY,
     "state_class": SensorStateClass.MEASUREMENT,
     "native_unit_of_measurement": PERCENTAGE,
-    "icon": "mdi:battery",
 }
 SOH = {
     "state_class": SensorStateClass.MEASUREMENT,
     "native_unit_of_measurement": PERCENTAGE,
-    "icon": "mdi:battery",
 }
 DIAG = {"entity_category": EntityCategory.DIAGNOSTIC}
 
@@ -111,8 +106,8 @@ BMU_SENSORS: tuple[BydBoxSensorEntityDescription, ...] = (
     _d("bmu_v_A", "BMU version A", entity_registry_enabled_default=False, **DIAG),
     _d("bmu_v_B", "BMU version B", entity_registry_enabled_default=False, **DIAG),
     _d("bms_v", "BMS version", **DIAG),
-    _d("towers", "Towers", icon="mdi:counter", **DIAG),
-    _d("modules", "Modules", icon="mdi:counter", **DIAG),
+    _d("towers", "Towers", **DIAG),
+    _d("modules", "Modules", **DIAG),
     _d("application", "Application", **DIAG),
     _d("phase", "Phase", **DIAG),
     _d("errors", "Errors", **DIAG),
@@ -142,7 +137,7 @@ BMU_SENSORS: tuple[BydBoxSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfPower.WATT,
-        icon="mdi:lightning-bolt",
+
     ),
     _d("charge_lfte", "Charge total energy", **ENERGY_TOTAL),
     _d("discharge_lfte", "Discharge total energy", **ENERGY_TOTAL),
@@ -158,7 +153,7 @@ CONNECTION_SENSORS: tuple[BydBoxSensorEntityDescription, ...] = (
         "Connection Quality",
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=PERCENTAGE,
-        icon="mdi:connection",
+
         connection_metric=True,
         **DIAG,
     ),
@@ -167,7 +162,7 @@ CONNECTION_SENSORS: tuple[BydBoxSensorEntityDescription, ...] = (
         "Last Latency",
         device_class=SensorDeviceClass.DURATION,
         native_unit_of_measurement=UnitOfTime.MILLISECONDS,
-        icon="mdi:timer",
+
         connection_metric=True,
         entity_registry_enabled_default=False,
         **DIAG,
@@ -177,7 +172,7 @@ CONNECTION_SENSORS: tuple[BydBoxSensorEntityDescription, ...] = (
         "Average Latency",
         device_class=SensorDeviceClass.DURATION,
         native_unit_of_measurement=UnitOfTime.MILLISECONDS,
-        icon="mdi:timer",
+
         connection_metric=True,
         **DIAG,
     ),
@@ -185,11 +180,11 @@ CONNECTION_SENSORS: tuple[BydBoxSensorEntityDescription, ...] = (
         "consecutive_failures",
         "Consecutive Failures",
         state_class=SensorStateClass.MEASUREMENT,
-        icon="mdi:alert-circle",
+
         connection_metric=True,
         **DIAG,
     ),
-    _d("connection_health", "Connection Health", icon="mdi:check-circle", connection_metric=True, **DIAG),
+    _d("connection_health", "Connection Health", connection_metric=True, **DIAG),
 )
 
 _CELL_VOLTAGES = _attrs(
@@ -207,7 +202,7 @@ BMS_SENSORS: tuple[BydBoxSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfElectricPotential.MILLIVOLT,
-        icon="mdi:delta",
+
         **DIAG,
     ),
     _d("max_c_v_id", "Cell voltage max number"),
@@ -224,11 +219,11 @@ BMS_SENSORS: tuple[BydBoxSensorEntityDescription, ...] = (
     _d("charge_lfte", "Charge total energy", **ENERGY_TOTAL),
     _d("discharge_lfte", "Discharge total energy", **ENERGY_TOTAL),
     _d("efficiency", "Efficiency", native_unit_of_measurement=PERCENTAGE),
-    _d("balancing_qty", "Cells balancing", icon="mdi:counter", attr_fn=_attrs(cell_balancing="{p}cell_balancing")),
+    _d("balancing_qty", "Cells balancing", attr_fn=_attrs(cell_balancing="{p}cell_balancing")),
     _d("warnings", "Warnings", **DIAG),
     _d("errors", "Errors", **DIAG),
     _d("avg_c_v", "Cells average voltage", attr_fn=_CELL_VOLTAGES, **VOLTAGE),
-    _d("avg_c_t", "Cells average temperature", attr_fn=_attrs(cell_temps="{p}cell_temps"), **{**TEMPERATURE, "icon": "mdi:lightning-bolt"}),
+    _d("avg_c_t", "Cells average temperature", attr_fn=_attrs(cell_temps="{p}cell_temps"), **TEMPERATURE),
     _d(
         "max_history_cell_voltage",
         "Max history cell voltage",
@@ -256,14 +251,23 @@ async def async_setup_entry(
 ) -> None:
     """Add sensors for passed config_entry in HA."""
     coordinator = config_entry.runtime_data
+    async_add_entities(BydBoxSensor(coordinator, d) for d in (*BMU_SENSORS, *CONNECTION_SENSORS))
 
-    entities: list[BydBoxSensor] = [BydBoxSensor(coordinator, d) for d in (*BMU_SENSORS, *CONNECTION_SENSORS)]
-    entities.extend(
-        BydBoxSensor(coordinator, description, bms_id)
-        for bms_id in range(1, coordinator.towers + 1)
-        for description in BMS_SENSORS
-    )
-    async_add_entities(entities)
+    known_towers: set[int] = set()
+
+    @callback
+    def _async_add_towers() -> None:
+        """Add the sensors of new towers (also when towers are added later)."""
+        new_towers = [i for i in range(1, coordinator.towers + 1) if i not in known_towers]
+        if not new_towers:
+            return
+        known_towers.update(new_towers)
+        async_add_entities(
+            BydBoxSensor(coordinator, description, bms_id) for bms_id in new_towers for description in BMS_SENSORS
+        )
+
+    _async_add_towers()
+    config_entry.async_on_unload(coordinator.async_add_listener(_async_add_towers))
 
 
 class BydBoxSensor(BydBoxEntity, SensorEntity, RestoreEntity):

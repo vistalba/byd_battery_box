@@ -325,6 +325,11 @@ class BydBoxClient(ExtModbusClient):
             _LOGGER.error(f"unknown inverter. model: {model} inverter id: {id}")
         return inverter
 
+    async def update_static_data(self) -> bool:
+        """Re-read the static information (towers, modules, model)."""
+        async with self.ClientBusyLock(self):
+            return await self.update_info_data() and await self.update_ext_info_data()
+
     async def update_info_data(self) -> bool:
         """start reading info data"""
         regs = await self.get_registers(address=0x0000, count=20)

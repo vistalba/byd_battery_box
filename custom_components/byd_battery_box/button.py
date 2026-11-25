@@ -7,10 +7,11 @@ from dataclasses import dataclass
 
 from homeassistant.components.button import ButtonEntity, ButtonEntityDescription
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
+from .const import DOMAIN
 from .coordinator import BydBoxConfigEntry, BydBoxCoordinator
 from .entity import BydBoxEntity
 
@@ -62,7 +63,6 @@ BUTTONS: tuple[BydBoxButtonEntityDescription, ...] = (
         key="reset_history_cell_voltage",
         translation_key="reset_history_cell_voltage",
         legacy_name="Reset history cell voltage",
-        icon="mdi:restore-alert",
     ),
 )
 
@@ -74,13 +74,23 @@ async def async_setup_entry(
 ) -> None:
     """Add buttons for passed config_entry in HA."""
     coordinator = config_entry.runtime_data
-    entities = [BydBoxButton(coordinator, description) for description in BUTTONS]
-    entities.extend(
-        BydBoxButton(coordinator, description, bms_id)
-        for bms_id in range(1, coordinator.towers + 1)
-        for description in BUTTONS
-    )
-    async_add_entities(entities)
+    async_add_entities(BydBoxButton(coordinator, description) for description in BUTTONS)
+
+    known_towers: set[int] = set()
+
+    @callback
+    def _async_add_towers() -> None:
+        """Add the buttons of new towers (also when towers are added later)."""
+        new_towers = [i for i in range(1, coordinator.towers + 1) if i not in known_towers]
+        if not new_towers:
+            return
+        known_towers.update(new_towers)
+        async_add_entities(
+            BydBoxButton(coordinator, description, bms_id) for bms_id in new_towers for description in BUTTONS
+        )
+
+    _async_add_towers()
+    config_entry.async_on_unload(coordinator.async_add_listener(_async_add_towers))
 
 
 class BydBoxButton(BydBoxEntity, ButtonEntity):
@@ -104,5 +114,5 @@ class BydBoxButton(BydBoxEntity, ButtonEntity):
             self.coordinator.reset_history_cell_voltage(unit_id)
             return
         if not self.coordinator.last_update_success:
-            raise HomeAssistantError("The BYD Battery Box is currently not reachable")
+            raise HomeAssistantError(translation_domain=DOMAIN, translation_key="not_reachable")
         await self.coordinator.async_start_update_log_history(unit_id, self.entity_description.log_entries // 20)

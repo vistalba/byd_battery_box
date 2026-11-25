@@ -75,3 +75,10 @@ class BydBoxEntity(CoordinatorEntity[BydBoxCoordinator]):
         # Keep the entity ids of version 0.1.x for new installations, so
         # dashboards, cards and automations shared by the community keep working.
         self.entity_id = f"{platform}.{slugify(legacy_name)}"
+
+    @property
+    def available(self) -> bool:
+        """Entities of towers that are no longer reported are unavailable."""
+        if self._bms_id is not None and self._bms_id > self.coordinator.towers:
+            return False
+        return super().available

@@ -83,6 +83,11 @@ class BydBoxCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return self.client.data.get("serial") or None
 
     @property
+    def consecutive_failures(self) -> int:
+        """Return the number of consecutive failed BMU reads."""
+        return self._failures
+
+    @property
     def unique_prefix(self) -> str:
         """Return the prefix of unique ids (BMU serial, entry id as fallback)."""
         return self.serial or self.config_entry.entry_id
@@ -116,7 +121,11 @@ class BydBoxCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             await self.client.init_data()
         except Exception as err:
             self.client.close()
-            raise UpdateFailed(f"Unable to connect to BYD Battery Box: {err}") from err
+            raise UpdateFailed(
+                translation_domain=DOMAIN,
+                translation_key="cannot_connect",
+                translation_placeholders={"error": str(err)},
+            ) from err
         if self._health_task is None:
             self._health_task = self.config_entry.async_create_background_task(
                 self.hass,
@@ -144,6 +153,7 @@ class BydBoxCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         now = time.monotonic()
         if not self._last_log_update or now - self._last_log_update > self.scan_interval_log:
             await self._async_update_log()
+            await self._async_update_info()
 
         if not self._last_bms_update or now - self._last_bms_update > self.scan_interval_bms:
             if await self.client.update_all_bms_status_data():
@@ -160,13 +170,28 @@ class BydBoxCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if not result:
             self._failures += 1
             if self._failures >= MAX_CONSECUTIVE_FAILURES or self.data is None:
-                raise UpdateFailed(f"Reading BMU status data failed {self._failures} times in a row")
+                raise UpdateFailed(
+                    translation_domain=DOMAIN,
+                    translation_key="update_failed",
+                    translation_placeholders={"failures": str(self._failures)},
+                )
             _LOGGER.debug("Reading BMU status data failed (%s/%s)", self._failures, MAX_CONSECUTIVE_FAILURES)
             return self.client.data
 
         self._failures = 0
         self._compute_delta_c_v()
         return self.client.data
+
+    async def _async_update_info(self) -> None:
+        """Re-read the static information to detect added or removed towers."""
+        towers = self.towers
+        try:
+            ok = await self.client.update_static_data()
+        except Exception as err:  # library raises generic exceptions
+            _LOGGER.debug("Error reading BMU info data: %s", err)
+            return
+        if ok and self.towers != towers:
+            _LOGGER.info("Number of towers changed from %s to %s", towers, self.towers)
 
     async def _async_update_log(self) -> None:
         """Read the newest log entries of all units."""
@@ -190,7 +215,11 @@ class BydBoxCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             await self.client.update_log_history(unit_id, log_depth=log_depth)
         except Exception as err:
-            raise UpdateFailed(f"Failed updating {DEVICE_TYPES[unit_id]} log history: {err}") from err
+            raise UpdateFailed(
+                translation_domain=DOMAIN,
+                translation_key="log_history_failed",
+                translation_placeholders={"unit": DEVICE_TYPES[unit_id], "error": str(err)},
+            ) from err
         self._last_log_update = time.monotonic()
         if prev_len_log != len(self.client.log):
             await self._async_save_log()

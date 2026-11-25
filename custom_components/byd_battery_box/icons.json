@@ -1,0 +1,98 @@
+{
+  "entity": {
+    "sensor": {
+      "avg_c_t": {
+        "default": "mdi:lightning-bolt"
+      },
+      "avg_c_v": {
+        "default": "mdi:lightning-bolt"
+      },
+      "avg_latency": {
+        "default": "mdi:timer"
+      },
+      "balancing_qty": {
+        "default": "mdi:counter"
+      },
+      "bat_voltage": {
+        "default": "mdi:lightning-bolt"
+      },
+      "bmu_temp": {
+        "default": "mdi:thermometer"
+      },
+      "connection_health": {
+        "default": "mdi:check-circle",
+        "state": {
+          "unhealthy": "mdi:close-circle"
+        }
+      },
+      "connection_quality": {
+        "default": "mdi:connection"
+      },
+      "consecutive_failures": {
+        "default": "mdi:alert-circle"
+      },
+      "current": {
+        "default": "mdi:lightning-bolt"
+      },
+      "delta_c_v": {
+        "default": "mdi:delta"
+      },
+      "last_latency": {
+        "default": "mdi:timer"
+      },
+      "max_c_t": {
+        "default": "mdi:thermometer"
+      },
+      "max_c_v": {
+        "default": "mdi:lightning-bolt"
+      },
+      "max_cell_temp": {
+        "default": "mdi:thermometer"
+      },
+      "max_cell_v": {
+        "default": "mdi:lightning-bolt"
+      },
+      "max_history_cell_voltage": {
+        "default": "mdi:lightning-bolt"
+      },
+      "min_c_t": {
+        "default": "mdi:thermometer"
+      },
+      "min_c_v": {
+        "default": "mdi:lightning-bolt"
+      },
+      "min_cell_temp": {
+        "default": "mdi:thermometer"
+      },
+      "min_cell_v": {
+        "default": "mdi:lightning-bolt"
+      },
+      "min_history_cell_voltage": {
+        "default": "mdi:lightning-bolt"
+      },
+      "modules": {
+        "default": "mdi:counter"
+      },
+      "output_voltage": {
+        "default": "mdi:lightning-bolt"
+      },
+      "power": {
+        "default": "mdi:lightning-bolt"
+      },
+      "soc": {
+        "default": "mdi:battery"
+      },
+      "soh": {
+        "default": "mdi:battery"
+      },
+      "towers": {
+        "default": "mdi:counter"
+      }
+    },
+    "button": {
+      "reset_history_cell_voltage": {
+        "default": "mdi:restore-alert"
+      }
+    }
+  }
+}

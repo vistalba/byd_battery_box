@@ -1,0 +1,100 @@
+{
+  "title": "BYD Battery Box",
+  "config": {
+    "step": {
+      "user": {
+        "title": "BYD Battery Box einrichten",
+        "description": "Verbindungsdaten der BYD Battery Box eingeben. Die Batterie akzeptiert nur eine Modbus-Verbindung: andere Tools (z. B. BE Connect) vorher schliessen.",
+        "data": {
+          "name": "Name",
+          "host": "IP-Adresse",
+          "port": "Port",
+          "unit_id": "Modbus Unit-/Slave-ID",
+          "scan_interval": "Abfrageintervall BMU in Sekunden",
+          "bms_scan_interval": "Abfrageintervall BMS in Sekunden",
+          "log_scan_interval": "Abfrageintervall Logdaten in Sekunden"
+        },
+        "data_description": {
+          "name": "Name des Integrationseintrags.",
+          "host": "IP-Adresse oder Hostname der BYD Battery Box (BMU), z. B. 192.168.16.254.",
+          "port": "Modbus-TCP-Port der BMU (Standard 8080).",
+          "unit_id": "Modbus Unit-/Slave-ID der BMU (Standard 1).",
+          "scan_interval": "Wie oft die Hauptwerte der BMU (SOC, Leistung, Spannung …) gelesen werden. Minimum 10 Sekunden.",
+          "bms_scan_interval": "Wie oft die Detaildaten der Türme (Zellspannungen und -temperaturen) gelesen werden. Minimum 60 Sekunden.",
+          "log_scan_interval": "Wie oft neue Logeinträge gelesen werden. Minimum 120 Sekunden."
+        }
+      },
+      "reconfigure": {
+        "title": "BYD Battery Box neu konfigurieren",
+        "description": "Verbindungseinstellungen ändern. Die Integration wird während des Tests der neuen Einstellungen angehalten.",
+        "data": {
+          "host": "IP-Adresse",
+          "port": "Port",
+          "unit_id": "Modbus Unit-/Slave-ID"
+        },
+        "data_description": {
+          "host": "IP-Adresse oder Hostname der BYD Battery Box (BMU), z. B. 192.168.16.254.",
+          "port": "Modbus-TCP-Port der BMU (Standard 8080).",
+          "unit_id": "Modbus Unit-/Slave-ID der BMU (Standard 1)."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung fehlgeschlagen",
+      "invalid_port": "Ungültige Portnummer",
+      "invalid_host": "Ungültige Host-Adresse",
+      "unknown": "Ein unbekannter Fehler ist aufgetreten",
+      "scan_interval_too_short": "Abfrageintervall zu kurz. Minimum 10 Sekunden.",
+      "bms_scan_interval_too_short": "BMS-Abfrageintervall zu kurz. Minimum 60 Sekunden.",
+      "log_scan_interval_too_short": "Log-Abfrageintervall zu kurz. Minimum 120 Sekunden."
+    },
+    "abort": {
+      "already_configured": "Diese BYD Battery Box ist bereits eingerichtet",
+      "reconfigure_successful": "Neukonfiguration erfolgreich",
+      "wrong_device": "Unter dieser Adresse antwortet eine andere BYD Battery Box (Seriennummer stimmt nicht überein)."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "BYD Battery Box Optionen",
+        "description": "Abfrageintervalle. Die Integration wird nach dem Speichern neu geladen.",
+        "data": {
+          "scan_interval": "Abfrageintervall BMU in Sekunden",
+          "bms_scan_interval": "Abfrageintervall BMS in Sekunden",
+          "log_scan_interval": "Abfrageintervall Logdaten in Sekunden"
+        },
+        "data_description": {
+          "scan_interval": "Wie oft die Hauptwerte der BMU (SOC, Leistung, Spannung …) gelesen werden. Minimum 10 Sekunden.",
+          "bms_scan_interval": "Wie oft die Detaildaten der Türme (Zellspannungen und -temperaturen) gelesen werden. Minimum 60 Sekunden.",
+          "log_scan_interval": "Wie oft neue Logeinträge gelesen werden. Minimum 120 Sekunden."
+        }
+      }
+    },
+    "error": {
+      "scan_interval_too_short": "Abfrageintervall zu kurz. Minimum 10 Sekunden.",
+      "bms_scan_interval_too_short": "BMS-Abfrageintervall zu kurz. Minimum 60 Sekunden.",
+      "log_scan_interval_too_short": "Log-Abfrageintervall zu kurz. Minimum 120 Sekunden."
+    }
+  },
+  "exceptions": {
+    "cannot_connect": {
+      "message": "Verbindung zur BYD Battery Box nicht möglich: {error}"
+    },
+    "update_failed": {
+      "message": "Lesen der BMU-Statusdaten ist {failures}-mal in Folge fehlgeschlagen"
+    },
+    "log_history_failed": {
+      "message": "Lesen der {unit}-Loghistorie fehlgeschlagen: {error}"
+    },
+    "not_reachable": {
+      "message": "Die BYD Battery Box ist derzeit nicht erreichbar"
+    }
+  },
+  "issues": {
+    "duplicate_entry": {
+      "title": "BYD Battery Box mehrfach eingerichtet",
+      "description": "Die Batterie mit der Seriennummer des Eintrags \"{title}\" ist bereits in einem anderen Eintrag eingerichtet. Die BMU akzeptiert nur eine Modbus-Verbindung, daher stören sich beide Einträge gegenseitig. Bitte einen der Einträge entfernen."
+    }
+  }
+}
