@@ -7,106 +7,73 @@ from typing import Any
 from homeassistant.components.sensor import (
     SensorEntity,
 )
-from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.icon import icon_for_battery_level
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
-from . import HubConfigEntry
 from .const import (
     BMS_SENSOR_TYPES,
     BMU_SENSOR_TYPES,
     CONNECTION_SENSOR_TYPES,
     ENTITY_PREFIX,
 )
-from .hub import Hub
+from .coordinator import BydBoxConfigEntry, BydBoxCoordinator
+from .entity import BydBoxEntity
 
 _LOGGER = logging.getLogger(__name__)
 
+# Data is fetched centrally by the coordinator.
+PARALLEL_UPDATES = 0
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: HubConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    config_entry: BydBoxConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Add sensors for passed config_entry in HA."""
-    hub:Hub = config_entry.runtime_data
-#    hub_name = config_entry.data[CONF_NAME]
+    coordinator = config_entry.runtime_data
 
-    entities = []
+    entities: list[SensorEntity] = []
 
     for sensor_info in BMU_SENSOR_TYPES.values():
-        sensor = BydBoxSensor(
-            platform_name = ENTITY_PREFIX,
-            hub = hub,
-            device_info = hub.device_info_bmu,
-            name = sensor_info[0],
-            key = sensor_info[1],
-            device_class = sensor_info[2],
-            state_class = sensor_info[3],
-            unit = sensor_info[4],
-            icon = sensor_info[5],
-            entity_category = sensor_info[6],
-        )
-        entities.append(sensor)
+        entities.append(BydBoxSensor(coordinator, None, *sensor_info))
 
     # Add connection health monitoring sensors
     for sensor_info in CONNECTION_SENSOR_TYPES.values():
-        sensor = BydBoxConnectionSensor(
-            platform_name = ENTITY_PREFIX,
-            hub = hub,
-            device_info = hub.device_info_bmu,
-            name = sensor_info[0],
-            key = sensor_info[1],
-            device_class = sensor_info[2],
-            state_class = sensor_info[3],
-            unit = sensor_info[4],
-            icon = sensor_info[5],
-            entity_category = sensor_info[6],
-        )
-        entities.append(sensor)
+        entities.append(BydBoxConnectionSensor(coordinator, None, *sensor_info))
 
-    towers = hub.data.get('towers')
-    if towers is not None and towers > 0:
-        for id in range(1,towers +1):
-            for sensor_info in BMS_SENSOR_TYPES.values():
-                sensor = BydBoxSensor(
-                    platform_name = ENTITY_PREFIX,
-                    hub = hub,
-                    device_info = hub.get_device_info_bms(id),
-                    name = f'BMS {id} ' + sensor_info[0],
-                    key = f'bms{id}_' + sensor_info[1],
-                    device_class = sensor_info[2],
-                    state_class = sensor_info[3],
-                    unit = sensor_info[4],
-                    icon = sensor_info[5],
-                    entity_category = sensor_info[6],
-                )
-                entities.append(sensor)
+    for bms_id in range(1, coordinator.towers + 1):
+        for sensor_info in BMS_SENSOR_TYPES.values():
+            name, key, *rest = sensor_info
+            entities.append(BydBoxSensor(coordinator, bms_id, f"BMS {bms_id} {name}", f"bms{bms_id}_{key}", *rest))
 
     async_add_entities(entities)
-    return True
 
-class BydBoxSensor(SensorEntity, RestoreEntity):
+
+class BydBoxSensor(BydBoxEntity, SensorEntity, RestoreEntity):
     """Representation of an BYD Battery Box Modbus sensor."""
 
-    def __init__(self, platform_name, hub, device_info, name, key, device_class, state_class, unit, icon, entity_category):
+    def __init__(self, coordinator: BydBoxCoordinator, bms_id: int | None, name, key, device_class, state_class, unit, icon, entity_category):
         """Initialize the sensor."""
-        self._platform_name = platform_name
-        self._hub:Hub = hub
-        self._key = key
+        super().__init__(coordinator, key, bms_id)
+        self._platform_name = ENTITY_PREFIX
         self._name = name
         self._unit_of_measurement = unit
         self._icon = icon
-        self._device_info = device_info
         if device_class is not None:
             self._attr_device_class = device_class
         if state_class is not None:
             self._attr_state_class = state_class
         self._attr_entity_category = entity_category
 
+    @property
+    def _data(self) -> dict[str, Any]:
+        return self.coordinator.client.data
+
     async def async_added_to_hass(self):
         """Register callbacks."""
-        self._hub.async_add_hub_entity(self._modbus_data_updated)
+        await super().async_added_to_hass()
         # Try to restore last state from HA history for history sensors
         try:
             last_state = await self.async_get_last_state()
@@ -118,30 +85,14 @@ class BydBoxSensor(SensorEntity, RestoreEntity):
             # Restore state value
             try:
                 val = float(last_state.state)
-                self._hub.data[self._key] = val
+                self._data[self._key] = val
             except Exception:
                 pass
             # Restore per-cell attribute if present
             attrs = getattr(last_state, 'attributes', {}) or {}
             cells = attrs.get('cell_voltages')
             if cells is not None:
-                self._hub.data[f'{self._key}_cells'] = cells
-
-    async def async_will_remove_from_hass(self) -> None:
-        self._hub.async_remove_hub_entity(self._modbus_data_updated)
-
-    @callback
-    def _modbus_data_updated(self):
-        self.async_write_ha_state()
-
-    @callback
-    def _update_state(self):
-        if self._key in self._hub.data:
-            self._state = self._hub.data[self._key]
-
-            self._icon = icon_for_battery_level(
-                battery_level=self.native_value, charging=False
-            )
+                self._data[f'{self._key}_cells'] = cells
 
     @property
     def name(self):
@@ -165,78 +116,56 @@ class BydBoxSensor(SensorEntity, RestoreEntity):
     @property
     def state(self):
         """Return the state of the sensor."""
-        if self._key in self._hub.data:
-            return self._hub.data.get(self._key)
+        if self._key in self._data:
+            return self._data.get(self._key)
 
     @property
     def extra_state_attributes(self):
         if 'balancing_qty' in self._key:
-            return {'cell_balancing': self._hub.data.get(f'{self._key[:4]}_cell_balancing')}
+            return {'cell_balancing': self._data.get(f'{self._key[:4]}_cell_balancing')}
         elif 'avg_c_v' in self._key:
             return {
-                'cell_voltages': self._hub.data.get(f'{self._key[:4]}_cell_voltages'),
-                'cell_voltages_max_history': self._hub.data.get(f'{self._key[:4]}_cell_voltages_max_history'),
-                'cell_voltages_min_history': self._hub.data.get(f'{self._key[:4]}_cell_voltages_min_history'),
+                'cell_voltages': self._data.get(f'{self._key[:4]}_cell_voltages'),
+                'cell_voltages_max_history': self._data.get(f'{self._key[:4]}_cell_voltages_max_history'),
+                'cell_voltages_min_history': self._data.get(f'{self._key[:4]}_cell_voltages_min_history'),
             }
         elif 'max_history_c_v' in self._key:
             return {
-                'cell_voltages_max_history': self._hub.data.get(f'{self._key[:4]}_cell_voltages_max_history'),
-                'cell_voltages': self._hub.data.get(f'{self._key[:4]}_cell_voltages'),
+                'cell_voltages_max_history': self._data.get(f'{self._key[:4]}_cell_voltages_max_history'),
+                'cell_voltages': self._data.get(f'{self._key[:4]}_cell_voltages'),
             }
         elif 'min_history_c_v' in self._key:
             return {
-                'cell_voltages_min_history': self._hub.data.get(f'{self._key[:4]}_cell_voltages_min_history'),
-                'cell_voltages': self._hub.data.get(f'{self._key[:4]}_cell_voltages'),
+                'cell_voltages_min_history': self._data.get(f'{self._key[:4]}_cell_voltages_min_history'),
+                'cell_voltages': self._data.get(f'{self._key[:4]}_cell_voltages'),
             }
         elif 'avg_c_t' in self._key:
-            return {'cell_temps': self._hub.data.get(f'{self._key[:4]}_cell_temps')}
+            return {'cell_temps': self._data.get(f'{self._key[:4]}_cell_temps')}
         elif 'log_entries' in self._key:
-            return {'log': self._hub.data.get('log')}
+            return {'log': self._data.get('log')}
         elif 'b_total' in self._key:
-            return {'total_cells': self._hub.data.get(f'{self._key[:4]}_b_cells_total')}
+            return {'total_cells': self._data.get(f'{self._key[:4]}_b_cells_total')}
         elif 'max_history_cell_voltage' in self._key or 'min_history_cell_voltage' in self._key:
-            return {'cell_voltages': self._hub.data.get(f'{self._key}_cells')}
+            return {'cell_voltages': self._data.get(f'{self._key}_cells')}
 
         return None
 
-    @property
-    def should_poll(self) -> bool:
-        """Data is delivered by the hub"""
-        return False
 
-    @property
-    def device_info(self) -> dict[str, Any] | None:
-        return self._device_info
-
-
-class BydBoxConnectionSensor(SensorEntity, RestoreEntity):
+class BydBoxConnectionSensor(BydBoxEntity, SensorEntity):
     """Representation of a BYD Battery Box connection health sensor."""
 
-    def __init__(self, platform_name, hub, device_info, name, key, device_class, state_class, unit, icon, entity_category):
+    def __init__(self, coordinator: BydBoxCoordinator, bms_id: int | None, name, key, device_class, state_class, unit, icon, entity_category):
         """Initialize the connection sensor."""
-        self._platform_name = platform_name
-        self._hub:Hub = hub
-        self._key = key
+        super().__init__(coordinator, key, bms_id)
+        self._platform_name = ENTITY_PREFIX
         self._name = name
         self._unit_of_measurement = unit
         self._icon = icon
-        self._device_info = device_info
         if device_class is not None:
             self._attr_device_class = device_class
         if state_class is not None:
             self._attr_state_class = state_class
         self._attr_entity_category = entity_category
-
-    async def async_added_to_hass(self):
-        """Register callbacks."""
-        self._hub.async_add_hub_entity(self._connection_data_updated)
-
-    async def async_will_remove_from_hass(self) -> None:
-        self._hub.async_remove_hub_entity(self._connection_data_updated)
-
-    @callback
-    def _connection_data_updated(self):
-        self.async_write_ha_state()
 
     @property
     def name(self):
@@ -261,18 +190,10 @@ class BydBoxConnectionSensor(SensorEntity, RestoreEntity):
     def state(self):
         """Return the state of the connection sensor."""
         # Get connection metrics from the client
-        metrics = self._hub._bydclient.get_connection_metrics()
+        metrics = self.coordinator.client.get_connection_metrics()
         return metrics.get(self._key)
 
     @property
-    def should_poll(self) -> bool:
-        """Data is delivered by the hub"""
-        return False
-
-    @property
-    def device_info(self) -> dict[str, Any] | None:
-        return self._device_info
-
-
-
-
+    def available(self) -> bool:
+        """Connection sensors stay available to show the connection problem."""
+        return True

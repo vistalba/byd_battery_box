@@ -32,7 +32,8 @@ byd_battery_box/
 │   ├── __init__.py                      # Entry point, platform setup (sensor + button)
 │   ├── config_flow.py                   # UI-based configuration flow
 │   ├── const.py                         # Constants, sensor/button type definitions
-│   ├── hub.py                           # Hub class: lifecycle, periodic updates, device info
+│   ├── coordinator.py                   # DataUpdateCoordinator: polling BMU/BMS/log, lifecycle
+│   ├── entity.py                        # Base entity (CoordinatorEntity) + device info
 │   ├── sensor.py                        # Sensor entity definitions
 │   ├── button.py                        # Button entity definitions (log history, reset)
 │   ├── bydboxclient.py                  # Core Modbus client: data reading & decoding
@@ -60,13 +61,13 @@ byd_battery_box/
 
 ```
 User Config (config_flow.py)
-    → Hub initialization (__init__.py → hub.py)
-        → BydBoxClient connects via Modbus TCP (bydboxclient.py → extmodbusclient.py)
+    → BydBoxCoordinator (__init__.py → coordinator.py), stored in entry.runtime_data
+        → _async_setup: BydBoxClient connects via Modbus TCP (bydboxclient.py → extmodbusclient.py)
             → Reads holding registers from battery
             → Decodes binary responses using bydbox_const.py
-            → Populates self.data dict
-        → Hub triggers periodic updates on 3 intervals
-        → Sensor/Button entities read from hub.data
+            → Populates client.data dict
+        → _async_update_data every BMU interval; BMS and log data on their own intervals
+        → Sensor/Button entities (CoordinatorEntity) read from coordinator.client.data
             → Home Assistant UI displays values
 ```
 
@@ -74,7 +75,8 @@ User Config (config_flow.py)
 
 | Class | File | Responsibility |
 |---|---|---|
-| `Hub` | `hub.py` | Central manager: creates client, schedules updates, manages entity lifecycle, provides device info |
+| `BydBoxCoordinator` | `coordinator.py` | DataUpdateCoordinator: creates client, polls BMU/BMS/log data, availability (3 failed BMU reads → unavailable), log persistence |
+| `BydBoxEntity` | `entity.py` | Base CoordinatorEntity with device info |
 | `BydBoxClient` | `bydboxclient.py` | Modbus communication: connects to battery, reads registers, decodes binary data, persists logs |
 | `ExtModbusClient` | `extmodbusclient.py` | Base class: async Modbus TCP with retry logic, connection management, pymodbus compatibility |
 | `BydBoxSensor` | `sensor.py` | HA sensor entity: displays measurement values, supports state restore, provides cell data as attributes |
@@ -211,11 +213,9 @@ Log entries contain timestamp, unit, code and raw hex data; entries older than 3
 
 ### Concurrency Safety
 
-- `bydboxclient.py` uses a `ClientBusyLock` async context manager to prevent concurrent Modbus operations
-- `hub.py` uses a `BusyLock` async context manager for the same purpose
-- Hub manages multiple update timers that could overlap; the busy lock prevents conflicts
-- `hub.close()` is async — stops the `ConnectionHealthMonitor` task before disconnecting the client
-- `ConnectionHealthMonitor.stop_monitoring()` is async — properly awaits task cancellation with `CancelledError` handling
+- `bydboxclient.py` uses a `ClientBusyLock` (wrapping an `asyncio.Lock`) to serialize all Modbus operations, including the health monitor
+- The coordinator runs updates sequentially; log history requests (buttons) are executed inside the next update
+- `coordinator.async_shutdown()` cancels the health monitor background task and closes the Modbus connection
 
 ### Binary Data Handling
 

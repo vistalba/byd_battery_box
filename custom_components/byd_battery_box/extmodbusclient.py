@@ -61,7 +61,7 @@ class ExtModbusClient:
 
     async def _check_and_reconnect(self):
         if not self._client.connected:
-            _LOGGER.warning("Modbus client is not connected, reconnecting...", exc_info=True)
+            _LOGGER.debug("Modbus client is not connected, reconnecting...")
             return await self.connect()
         return self._client.connected
 
@@ -97,7 +97,7 @@ class ExtModbusClient:
             try:
                 data = await self._client.read_holding_registers(address=address, count=count, device_id=unit_id)
             except (ModbusIOException, ConnectionException) as e:
-                _LOGGER.warning(
+                _LOGGER.debug(
                     f'error reading registers attempt {attempt + 1}/{retries + 1}: {type(e).__name__} connected: {self._client.connected} address: {address} count: {count} unit id: {self._unit_id} {e}')
                 if attempt < retries:
                     await asyncio.sleep(.2)
@@ -124,7 +124,8 @@ class ExtModbusClient:
                 await asyncio.sleep(.2)
 
         if data is None or data.isError():
-            _LOGGER.error(
+            # Logged at debug level: the coordinator logs unavailability once.
+            _LOGGER.debug(
                 f"error reading registers. retries exhausted. connected {self._client.connected} register: {address} count: {count} unit id: {self._unit_id} retries {retries} error: {data} ")
             return None
 

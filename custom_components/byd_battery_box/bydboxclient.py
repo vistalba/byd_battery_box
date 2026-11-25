@@ -426,7 +426,7 @@ class BydBoxClient(ExtModbusClient):
         async with self.ClientBusyLock(self):
             regs = await self.get_registers(address=0x0500, count=21) # 1280
             if regs is None:
-                _LOGGER.warning('update_bmu_status_data regs is None')
+                _LOGGER.debug('update_bmu_status_data regs is None')
                 return False
 
             soc = self._client.convert_from_registers(regs[0:1], data_type = self._client.DATATYPE.UINT16)
