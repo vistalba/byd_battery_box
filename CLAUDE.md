@@ -41,7 +41,6 @@ byd_battery_box/
 │   ├── bydbox_const.py                  # Hardware constants, error/log code decoders
 │   ├── manifest.json                    # HA integration metadata (version, requirements)
 │   ├── translations/en.json             # UI strings (English)
-│   ├── client_test.py                   # Minimal test file
 │   └── log_store.py                     # Log persistence (HA Store + CSV export)
 ├── .github/workflows/
 │   └── ci.yaml                          # All CI: lint, syntax, HACS, hassfest, mypy, version bump & release
@@ -194,6 +193,10 @@ ruff check --fix custom_components/
 # Syntax check
 python -m py_compile custom_components/byd_battery_box/*.py
 
+# Tests (needs Python 3.13)
+pip install -r requirements_test.txt
+pytest --cov
+
 # Type check (informational)
 pip install mypy
 mypy custom_components/
@@ -214,7 +217,7 @@ Log entries contain timestamp, unit, code and raw hex data; entries older than 3
 
 - ~~`config_flow.py:123-126` has a bug~~ — **FIXED**: `InvalidPort` and `InvalidHost` exception handlers now have correct error keys
 - ~~README sensor tables are empty ("To come!")~~ — **FIXED**: All sensor tables populated
-- `client_test.py` is minimal, no comprehensive test suite exists
+- Test suite in `tests/` (pytest-homeassistant-custom-component) runs against a BYD Modbus simulator (`tests/byd_simulator.py`), coverage > 95 %
 - `bydboxclient.py` — `get_log_list()` dict key renamed from duplicate `'data'` to `'hexdata'` for raw hex data
 
 ### Concurrency Safety

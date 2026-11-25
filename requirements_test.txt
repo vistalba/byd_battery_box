@@ -1,0 +1,5 @@
+# Test requirements (pins Home Assistant via pytest-homeassistant-custom-component)
+pytest-homeassistant-custom-component==0.13.316
+pymodbus>=3.11.2
+ruff
+mypy

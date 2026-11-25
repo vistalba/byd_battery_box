@@ -34,7 +34,8 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"client_test.py" = ["T20", "E702"]  # allow print and semicolons in test file
+"scripts/*.py" = ["T20"]  # allow print in scripts
+"tests/byd_simulator.py" = ["T20"]
 "bydbox_const.py" = ["E501"]  # allow long lines in constants file
 
 [tool.mypy]
@@ -48,3 +49,18 @@ strict_equality = false
 show_error_codes = true
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = ["ignore::DeprecationWarning:pymodbus.*"]
+
+[tool.coverage.run]
+source = ["custom_components.byd_battery_box"]
+branch = false
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]

@@ -36,11 +36,19 @@ from .extmodbusclient import ExtModbusClient
 
 _LOGGER = logging.getLogger(__name__)
 
+
+def _list_value(values: list[str], index: int) -> str:
+    """Return values[index] or 'Unknown: <index>' for unexpected values."""
+    if 0 <= index < len(values):
+        return values[index]
+    return f'Unknown: {index}'
+
 class BydBoxClient(ExtModbusClient):
     """Async Modbus Client for BYD Battery Box"""
 
     _min_response_delay = 0.2 # minimum delayin s after write register
     _retry_delay = 0.2
+    _response_timeout = 5 # max. time in s to wait for a BMS/log response
 
     def __init__(self, host: str, port: int, unit_id: int, timeout: int) -> None:
         """Init Class"""
@@ -180,13 +188,17 @@ class BydBoxClient(ExtModbusClient):
                 await self._client.connect()
 
             try:
-                await self.update_info_data()
+                result = await self.update_info_data()
             except Exception:
+                result = False
+            if not result:
                 raise Exception(f"Error reading base info unit id: {self._unit_id}")
 
             try:
-                await self.update_ext_info_data()
+                result = await self.update_ext_info_data()
             except Exception:
+                result = False
+            if not result:
                 raise Exception(f"Error reading ext info unit id: {self._unit_id}")
 
             self.initialized = True
@@ -363,17 +375,17 @@ class BydBoxClient(ExtModbusClient):
         self.data['bmu_v_B'] = bmu_v_B
         self.data['bmu_v'] = bmu_v
         self.data['bms_v'] = bms_v
-        self.data['bmu_area'] = WORKING_AREA[bmu_area]
-        self.data['bms_area'] = WORKING_AREA[bms_area]
+        self.data['bmu_area'] = _list_value(WORKING_AREA, bmu_area)
+        self.data['bms_area'] = _list_value(WORKING_AREA, bms_area)
         self.data['towers'] = towers
         self.data['modules'] = modules
         self._bms_qty = towers
         self._modules = modules
         self._bat_type = bat_type
 
-        self.data['application'] = APPLICATION_LIST[application_id]
+        self.data['application'] = _list_value(APPLICATION_LIST, application_id)
         self.data['lvs_type'] = lvs_type_id
-        self.data['phase'] = PHASE_LIST[phase_id]
+        self.data['phase'] = _list_value(PHASE_LIST, phase_id)
 
         return True
 
@@ -757,16 +769,16 @@ class BydBoxClient(ExtModbusClient):
 
     async def _wait_for_response(self, address, ready_response = 0x8801):
         response_reg = 0
-        timeout = 5
-        dt = 0
-        #j = 0
-        #start = datetime.now()
+        timeout = self._response_timeout
+        dt = 0.0
+        start = time.monotonic()
         await asyncio.sleep(self._min_response_delay)
         while response_reg != ready_response and dt < timeout: # wait for the response
             await asyncio.sleep(self._retry_delay)
-            dt += self._retry_delay
+            # the time spent reading counts as well (reads may be retried)
+            dt = max(dt + self._retry_delay, time.monotonic() - start)
             try:
-                data = await self.read_holding_registers(unit_id=self._unit_id, address=address, count=1)
+                data = await self.read_holding_registers(unit_id=self._unit_id, address=address, count=1, retries=0)
                 if data is not None:
                     if not data.isError():
                         response_reg = data.registers[0]
@@ -1021,7 +1033,7 @@ class BydBoxClient(ExtModbusClient):
             datapoints['max_discharge_v'] = self.calculate_value(self.convert_from_byte_int16(data,6), -1, 1)
             datapoints['status'] = [self.get_value_from_dict(BMU_STATUS, data[8], 'Undefined')]
             datapoints['bat_t'] = data[9]
-            datapoints['inverter'] = INVERTER_LIST[data[10]]
+            datapoints['inverter'] = self.get_value_from_dict(INVERTER_LIST, data[10], 'Unknown')
             datapoints['bms_qty'] = data[11]
         elif code == 40:
             datapoints['firmware_n1']  = data[0]

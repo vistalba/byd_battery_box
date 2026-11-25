@@ -52,6 +52,7 @@ class BydBoxCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def __init__(self, hass: HomeAssistant, entry: BydBoxConfigEntry, client: BydBoxClient | None = None) -> None:
         """Initialize the coordinator."""
+        self._health_task: asyncio.Task[None] | None = None
         scan_interval = int(get_entry_value(entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL))
         super().__init__(
             hass,
@@ -74,7 +75,6 @@ class BydBoxCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_log_update = 0.0
         self._failures = 0
         self._log_history_request: tuple[int, int] | None = None
-        self._health_task: asyncio.Task[None] | None = None
 
     # ------------------------------------------------------------------ helpers
     @property
