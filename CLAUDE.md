@@ -31,7 +31,7 @@ byd_battery_box/
 ├── custom_components/byd_battery_box/   # Main integration code
 │   ├── __init__.py                      # Entry point, platform setup (sensor + button)
 │   ├── config_flow.py                   # UI-based configuration flow
-│   ├── const.py                         # Constants, sensor/button type definitions
+│   ├── const.py                         # Constants (domain, defaults, limits)
 │   ├── coordinator.py                   # DataUpdateCoordinator: polling BMU/BMS/log, lifecycle
 │   ├── entity.py                        # Base entity (CoordinatorEntity) + device info
 │   ├── sensor.py                        # Sensor entity definitions
@@ -101,17 +101,23 @@ User Config (config_flow.py)
 
 ## Sensor Types
 
-### BMU Sensors (defined in `const.py` → `BMU_SENSOR_TYPES`)
+Entities use `EntityDescription` dataclasses, `has_entity_name = True` and translated names
+(`translations/en.json` → `entity`). Unique ids are `<BMU serial>_<key>` (BMS: `<serial>_bms<N>_<key>`);
+ids of version 0.1.x (`bydb_<key>`) and device identifiers are migrated in `__init__.py`.
+New installations still get the entity ids of 0.1.x (e.g. `sensor.state_of_charge`, `sensor.bms_1_cells_average_voltage`)
+so community dashboards and the visualization card keep working.
+
+### BMU Sensors (defined in `sensor.py` → `BMU_SENSORS`, `CONNECTION_SENSORS`)
 
 Diagnostic: inverter, BMU/BMS versions, towers, modules, application, phase, errors, capacity, param table version, cells per module, temp sensors per module, timestamps, log entries.
 
 Measurement: SOC (%), SOH (%), BMU temperature (C), cell temp min/max (C), cell voltage min/max (V), current (A), battery voltage (V), output voltage (V), power (W), charge/discharge total energy (kWh), efficiency (%).
 
-### BMS Sensors (defined in `const.py` → `BMS_SENSOR_TYPES`)
+### BMS Sensors (defined in `sensor.py` → `BMS_SENSORS`)
 
 Per-tower (up to 3 towers): cell voltage min/max (V) with cell IDs, cell temp min/max (C) with cell IDs, SOC (%), SOH (%), current (A), battery/output voltage (V), charge/discharge total energy (kWh), efficiency (%), cells balancing count, warnings, errors, average cell voltage (V), average cell temperature (C), max/min history cell voltage (V), balancing totals, timestamps, last log.
 
-### Button Types (defined in `const.py` → `BMU_BUTTON_TYPES`)
+### Button Types (defined in `button.py` → `BUTTONS`)
 
 - `update_log_history_100/500/1000/2000` - Fetch historical log entries
 - `reset_history_cell_voltage` - Reset cell voltage history tracking

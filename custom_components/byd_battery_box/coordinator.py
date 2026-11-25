@@ -83,6 +83,11 @@ class BydBoxCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return self.client.data.get("serial") or None
 
     @property
+    def unique_prefix(self) -> str:
+        """Return the prefix of unique ids (BMU serial, entry id as fallback)."""
+        return self.serial or self.config_entry.entry_id
+
+    @property
     def towers(self) -> int:
         """Return the number of towers (BMS)."""
         return int(self.client.data.get("towers") or 0)

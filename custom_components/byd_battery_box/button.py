@@ -1,13 +1,16 @@
-"""Platform for button integration."""
+"""Button platform for the BYD Battery Box integration."""
+
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 
-from homeassistant.components.button import ButtonEntity
+from homeassistant.components.button import ButtonEntity, ButtonEntityDescription
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import BMU_BUTTON_TYPES, ENTITY_PREFIX
 from .coordinator import BydBoxConfigEntry, BydBoxCoordinator
 from .entity import BydBoxEntity
 
@@ -17,6 +20,53 @@ _LOGGER = logging.getLogger(__name__)
 PARALLEL_UPDATES = 1
 
 
+@dataclass(frozen=True, kw_only=True)
+class BydBoxButtonEntityDescription(ButtonEntityDescription):
+    """Describes a BYD Battery Box button."""
+
+    # Name used up to version 0.1.x, used to keep the entity ids stable.
+    legacy_name: str
+    # Number of log entries read (0 for the reset button)
+    log_entries: int = 0
+
+
+BUTTONS: tuple[BydBoxButtonEntityDescription, ...] = (
+    BydBoxButtonEntityDescription(
+        key="update_log_history_100",
+        translation_key="update_log_history_100",
+        legacy_name="Update last 100 log entries",
+        log_entries=100,
+    ),
+    BydBoxButtonEntityDescription(
+        key="update_log_history_500",
+        translation_key="update_log_history_500",
+        legacy_name="Update last 500 log entries",
+        log_entries=500,
+        entity_registry_enabled_default=False,
+    ),
+    BydBoxButtonEntityDescription(
+        key="update_log_history_1000",
+        translation_key="update_log_history_1000",
+        legacy_name="Update last 1000 log entries",
+        log_entries=1000,
+        entity_registry_enabled_default=False,
+    ),
+    BydBoxButtonEntityDescription(
+        key="update_log_history_2000",
+        translation_key="update_log_history_2000",
+        legacy_name="Update last 2000 log entries",
+        log_entries=2000,
+        entity_registry_enabled_default=False,
+    ),
+    BydBoxButtonEntityDescription(
+        key="reset_history_cell_voltage",
+        translation_key="reset_history_cell_voltage",
+        legacy_name="Reset history cell voltage",
+        icon="mdi:restore-alert",
+    ),
+)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: BydBoxConfigEntry,
@@ -24,63 +74,35 @@ async def async_setup_entry(
 ) -> None:
     """Add buttons for passed config_entry in HA."""
     coordinator = config_entry.runtime_data
-
-    entities: list[BydBoxButton] = [
-        BydBoxButton(coordinator, None, info[0], info[1], info[2], info[5], info[6])
-        for info in BMU_BUTTON_TYPES.values()
-    ]
-    for bms_id in range(1, coordinator.towers + 1):
-        entities.extend(
-            BydBoxButton(coordinator, bms_id, f"BMS {bms_id} {info[0]}", f"bms{bms_id}_{info[1]}", info[2], info[5], info[6])
-            for info in BMU_BUTTON_TYPES.values()
-        )
-
+    entities = [BydBoxButton(coordinator, description) for description in BUTTONS]
+    entities.extend(
+        BydBoxButton(coordinator, description, bms_id)
+        for bms_id in range(1, coordinator.towers + 1)
+        for description in BUTTONS
+    )
     async_add_entities(entities)
 
 
 class BydBoxButton(BydBoxEntity, ButtonEntity):
     """Representation of a BYD Battery Box button."""
 
-    def __init__(self, coordinator: BydBoxCoordinator, bms_id: int | None, name, key, device_class, icon, entity_category):
+    entity_description: BydBoxButtonEntityDescription
+
+    def __init__(
+        self,
+        coordinator: BydBoxCoordinator,
+        description: BydBoxButtonEntityDescription,
+        bms_id: int | None = None,
+    ) -> None:
         """Initialize the button."""
-        super().__init__(coordinator, key, bms_id)
-        self._platform_name = ENTITY_PREFIX
-        self._name = name
-        self._icon = icon
-        if device_class is not None:
-            self._attr_device_class = device_class
-        self._attr_entity_category = entity_category
+        super().__init__(coordinator, description, description.legacy_name, Platform.BUTTON, bms_id)
 
     async def async_press(self) -> None:
         """Handle the button press."""
-        # Key patterns:
-        # - [bmsX_]update_log_history_XXX
-        # - [bmsX_]reset_history_cell_voltage
-        parts = self._key.split('_')
-        device_id = self._bms_id or 0
-
-        if self._key.endswith('reset_history_cell_voltage'):
-            self.coordinator.reset_history_cell_voltage(device_id)
+        unit_id = self._bms_id or 0
+        if self.entity_description.log_entries == 0:
+            self.coordinator.reset_history_cell_voltage(unit_id)
             return
-
-        # default: update log history buttons
-        try:
-            log_depth = int(float(parts[-1]) * 0.05)
-        except ValueError:
-            log_depth = 0
-        await self.coordinator.async_start_update_log_history(device_id, log_depth)
-
-    @property
-    def name(self):
-        """Return the name."""
-        return f"{self._name}"
-
-    @property
-    def icon(self):
-        """Return the button icon."""
-        return self._icon
-
-    @property
-    def unique_id(self) -> str | None:
-        """Return the unique id."""
-        return f"{self._platform_name}_{self._key}"
+        if not self.coordinator.last_update_success:
+            raise HomeAssistantError("The BYD Battery Box is currently not reachable")
+        await self.coordinator.async_start_update_log_history(unit_id, self.entity_description.log_entries // 20)

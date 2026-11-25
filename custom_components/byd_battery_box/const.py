@@ -1,13 +1,10 @@
-from homeassistant.components.sensor import (
-    SensorDeviceClass,
-    SensorStateClass,
-)
-from homeassistant.helpers.entity import EntityCategory
+"""Constants for the BYD Battery Box integration."""
 
 DOMAIN = "byd_battery_box"
 
 DEFAULT_NAME = "BYD Battery Box"
-ENTITY_PREFIX = "bydb"
+# Prefix of the unique ids used up to version 0.1.x (migrated to the BMU serial)
+LEGACY_UNIQUE_ID_PREFIX = "bydb"
 DEFAULT_SCAN_INTERVAL = 30
 DEFAULT_PORT = 8080
 DEFAULT_UNIT_ID = 1
@@ -18,91 +15,13 @@ DEFAULT_LOG_SCAN_INTERVAL = 600
 CONF_BMS_SCAN_INTERVAL = "bms_scan_interval"
 CONF_LOG_SCAN_INTERVAL = "log_scan_interval"
 
+MIN_SCAN_INTERVAL = 10
+MIN_BMS_SCAN_INTERVAL = 60
+MIN_LOG_SCAN_INTERVAL = 120
+
 DEVICE_TYPES = {
     0: "BMU",
     1: "BMS 1",
     2: "BMS 2",
     3: "BMS 3",
-}
-
-BMU_BUTTON_TYPES = {
-    "update_log_history_100": ["Update last 100 log entries", "update_log_history_100", None, None, None, None, None],
-    "update_log_history_500": ["Update last 500 log entries", "update_log_history_500", None, None, None, None, None],
-    "update_log_history_1000": ["Update last 1000 log entries", "update_log_history_1000", None, None, None, None, None],
-    "update_log_history_2000": ["Update last 2000 log entries", "update_log_history_2000", None, None, None, None, None],
-    "reset_history_cell_voltage": ["Reset history cell voltage", "reset_history_cell_voltage", None, None, None, "mdi:restore-alert", None],
-}
-
-BMU_SENSOR_TYPES = {
-    "inverter": ["Inverter", "inverter", None, None, None, None, EntityCategory.DIAGNOSTIC],
-    "bmu_v": ["BMU version", "bmu_v", None, None, None, None, EntityCategory.DIAGNOSTIC],
-    "bmu_v_A": ["BMU version A", "bmu_v_A", None, None, None, None, EntityCategory.DIAGNOSTIC],
-    "bmu_v_B": ["BMU version B", "bmu_v_B", None, None, None, None, EntityCategory.DIAGNOSTIC],
-    "bms_v": ["BMS version", "bms_v", None, None, None, None, EntityCategory.DIAGNOSTIC],
-    "towers": ["Towers", "towers", None, None, None, "mdi:counter", EntityCategory.DIAGNOSTIC],
-    "modules": ["Modules", "modules", None, None, None,  "mdi:counter", EntityCategory.DIAGNOSTIC],
-    "application": ["Application", "application", None, None, None, None, EntityCategory.DIAGNOSTIC],
-    "phase": ["Phase", "phase", None, None, None, None, EntityCategory.DIAGNOSTIC],
-    "errors": ["Errors", "errors", None, None, None, None, EntityCategory.DIAGNOSTIC],
-    "capacity": ["Total capacity", "capacity", None, None, "kWh", None, EntityCategory.DIAGNOSTIC],
-    "param_t_v": ["Param table version", "param_t_v", None, None, None, None, EntityCategory.DIAGNOSTIC],
-    "sensors_t": ["Temperature sensors per module", "sensors_t", None, None, None, None, EntityCategory.DIAGNOSTIC],
-    "cells": ["Cells per module", "cells", None, None, None, None, EntityCategory.DIAGNOSTIC],
-
-    "soc": ["State of charge", "soc", None, SensorStateClass.MEASUREMENT, "%", "mdi:battery", None],
-    "soh": ["State of health", "soh", None, SensorStateClass.MEASUREMENT, "%", "mdi:battery", None],
-    "bmu_temp": ["BMU temperature", "bmu_temp", SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, "°C", "mdi:thermometer", None],
-    "max_cell_temp": ["BMU cell temperature max", "max_cell_temp", SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, "°C", "mdi:thermometer", None],
-    "min_cell_temp": ["BMU cell temperature min", "min_cell_temp", SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, "°C", "mdi:thermometer", None],
-    "max_cell_v": ["BMU cell voltage max", "max_cell_v", SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, "V", "mdi:lightning-bolt", None],
-    "min_cell_v": ["BMU cell voltage min", "min_cell_v", SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, "V", "mdi:lightning-bolt", None],
-    "current": ["BMU current", "current", SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, "A", "mdi:lightning-bolt", None],
-    "bat_voltage": ["BMU battery voltage", "bat_voltage", SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, "V", "mdi:lightning-bolt", None],
-    "output_voltage": ["BMU output voltage", "output_voltage", SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, "V", "mdi:lightning-bolt", None],
-    "power": ["BMU power", "power", SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, "W", "mdi:lightning-bolt", None],
-    "charge_lfte": ["Charge total energy", "charge_lfte", SensorDeviceClass.ENERGY, SensorStateClass.TOTAL_INCREASING, "kWh", None, None],
-    "discharge_lfte": ["Discharge total energy", "discharge_lfte", SensorDeviceClass.ENERGY, SensorStateClass.TOTAL_INCREASING, "kWh", None, None],
-    "efficiency": ["Efficiency", "efficiency",None, None, "%", None, None],
-    "updated": ["Updated", "updated",SensorDeviceClass.TIMESTAMP, None, None, None, EntityCategory.DIAGNOSTIC],
-    "bmu_last_log": ["BMU last log", "bmu_last_log",None, None, None, None, EntityCategory.DIAGNOSTIC],
-    "log_entries": ["Log entries", "log_entries",None, None, None, None, EntityCategory.DIAGNOSTIC],
-}
-
-BMS_SENSOR_TYPES = {
-    "max_c_v": ["Cell voltage max", "max_c_v", SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, "V", "mdi:lightning-bolt", None],
-    "min_c_v": ["Cell voltage min", "min_c_v", SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, "V", "mdi:lightning-bolt", None],
-    "delta_c_v": ["Cells voltage delta", "delta_c_v", SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, "mV", "mdi:delta", EntityCategory.DIAGNOSTIC],
-    "max_c_v_id": ["Cell voltage max number", "max_c_v_id", None, None, None, None, None],
-    "min_c_v_id": ["Cell voltage min number", "min_c_v_id", None, None, None, None, None],
-    "max_c_t": ["Cell temperature max", "max_c_t", SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, "°C", "mdi:thermometer", None],
-    "min_c_t": ["Cell temperature min", "min_c_t", SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, "°C", "mdi:thermometer", None],
-    "max_c_t_id": ["Cell temperature max number", "max_c_t_id", None, None, None, None, None],
-    "min_c_t_id": ["Cell temperature min number", "min_c_t_id", None, None, None, None, None],
-    "soh": ["State of health", "soh", None, SensorStateClass.MEASUREMENT, "%", "mdi:battery", None],
-    "soc": ["State of charge", "soc", None, SensorStateClass.MEASUREMENT, "%", "mdi:battery", None],
-    "current": ["Current", "current", SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, "A", "mdi:lightning-bolt", None],
-    "bat_voltage": ["Battery voltage", "bat_voltage", SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, "V", "mdi:lightning-bolt", None],
-    "output_voltage": ["Output voltage", "output_voltage", SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, "V", "mdi:lightning-bolt", None],
-    "charge_lfte": ["Charge total energy", "charge_lfte", SensorDeviceClass.ENERGY, SensorStateClass.TOTAL_INCREASING, "kWh", None, None],
-    "discharge_lfte": ["Discharge total energy", "discharge_lfte", SensorDeviceClass.ENERGY, SensorStateClass.TOTAL_INCREASING, "kWh", None, None],
-    "efficiency": ["Efficiency", "efficiency",None, None, "%", None, None],
-    "balancing_qty": ["Cells balancing", "balancing_qty",None, None, None, "mdi:counter", None],
-    "warnings": ["Warnings", "warnings",None, None, None, None, EntityCategory.DIAGNOSTIC],
-    "errors": ["Errors", "errors",None, None, None, None, EntityCategory.DIAGNOSTIC],
-    "avg_c_v": ["Cells average voltage", "avg_c_v", SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, "V", "mdi:lightning-bolt", None],
-    "avg_c_t": ["Cells average temperature", "avg_c_t", SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, "°C", "mdi:lightning-bolt", None],
-    "max_history_cell_voltage": ["Max history cell voltage", "max_history_cell_voltage", SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, "V", "mdi:lightning-bolt", None],
-    "min_history_cell_voltage": ["Min history cell voltage", "min_history_cell_voltage", SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, "V", "mdi:lightning-bolt", None],
-    "updated": ["Updated", "updated",SensorDeviceClass.TIMESTAMP, None, None, None, EntityCategory.DIAGNOSTIC],
-    "last_log": ["Last log", "last_log",None, None, None, None, EntityCategory.DIAGNOSTIC],
-    "b_total": ["Balancing total", "b_total",None, None, None, None, None],
-}
-
-# Connection Health Monitoring Diagnostic Sensors
-CONNECTION_SENSOR_TYPES = {
-    "connection_quality": ["Connection Quality", "connection_quality", None, SensorStateClass.MEASUREMENT, "%", "mdi:connection", EntityCategory.DIAGNOSTIC],
-    "last_latency": ["Last Latency", "last_latency", None, None, "ms", "mdi:timer", EntityCategory.DIAGNOSTIC],
-    "avg_latency": ["Average Latency", "avg_latency", None, None, "ms", "mdi:timer", EntityCategory.DIAGNOSTIC],
-    "consecutive_failures": ["Consecutive Failures", "consecutive_failures", None, SensorStateClass.MEASUREMENT, None, "mdi:alert-circle", EntityCategory.DIAGNOSTIC],
-    "connection_health": ["Connection Health", "connection_health", None, None, None, "mdi:check-circle", EntityCategory.DIAGNOSTIC],
 }

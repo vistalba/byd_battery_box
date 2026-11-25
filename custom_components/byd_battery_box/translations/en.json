@@ -28,5 +28,185 @@
     "abort": {
       "already_configured": "This BYD Battery Box is already configured"
     }
+  },
+  "entity": {
+    "sensor": {
+      "inverter": {
+        "name": "Inverter"
+      },
+      "bmu_v": {
+        "name": "BMU version"
+      },
+      "bmu_v_a": {
+        "name": "BMU version A"
+      },
+      "bmu_v_b": {
+        "name": "BMU version B"
+      },
+      "bms_v": {
+        "name": "BMS version"
+      },
+      "towers": {
+        "name": "Towers"
+      },
+      "modules": {
+        "name": "Modules"
+      },
+      "application": {
+        "name": "Application"
+      },
+      "phase": {
+        "name": "Phase"
+      },
+      "errors": {
+        "name": "Errors"
+      },
+      "capacity": {
+        "name": "Total capacity"
+      },
+      "param_t_v": {
+        "name": "Param table version"
+      },
+      "sensors_t": {
+        "name": "Temperature sensors per module"
+      },
+      "cells": {
+        "name": "Cells per module"
+      },
+      "soc": {
+        "name": "State of charge"
+      },
+      "soh": {
+        "name": "State of health"
+      },
+      "bmu_temp": {
+        "name": "Temperature"
+      },
+      "max_cell_temp": {
+        "name": "Cell temperature max"
+      },
+      "min_cell_temp": {
+        "name": "Cell temperature min"
+      },
+      "max_cell_v": {
+        "name": "Cell voltage max"
+      },
+      "min_cell_v": {
+        "name": "Cell voltage min"
+      },
+      "current": {
+        "name": "Current"
+      },
+      "bat_voltage": {
+        "name": "Battery voltage"
+      },
+      "output_voltage": {
+        "name": "Output voltage"
+      },
+      "power": {
+        "name": "Power"
+      },
+      "charge_lfte": {
+        "name": "Charge total energy"
+      },
+      "discharge_lfte": {
+        "name": "Discharge total energy"
+      },
+      "efficiency": {
+        "name": "Efficiency"
+      },
+      "updated": {
+        "name": "Updated"
+      },
+      "bmu_last_log": {
+        "name": "Last log"
+      },
+      "log_entries": {
+        "name": "Log entries"
+      },
+      "connection_quality": {
+        "name": "Connection quality"
+      },
+      "last_latency": {
+        "name": "Last latency"
+      },
+      "avg_latency": {
+        "name": "Average latency"
+      },
+      "consecutive_failures": {
+        "name": "Consecutive failures"
+      },
+      "connection_health": {
+        "name": "Connection health"
+      },
+      "max_c_v": {
+        "name": "Cell voltage max"
+      },
+      "min_c_v": {
+        "name": "Cell voltage min"
+      },
+      "delta_c_v": {
+        "name": "Cells voltage delta"
+      },
+      "max_c_v_id": {
+        "name": "Cell voltage max number"
+      },
+      "min_c_v_id": {
+        "name": "Cell voltage min number"
+      },
+      "max_c_t": {
+        "name": "Cell temperature max"
+      },
+      "min_c_t": {
+        "name": "Cell temperature min"
+      },
+      "max_c_t_id": {
+        "name": "Cell temperature max number"
+      },
+      "min_c_t_id": {
+        "name": "Cell temperature min number"
+      },
+      "balancing_qty": {
+        "name": "Cells balancing"
+      },
+      "warnings": {
+        "name": "Warnings"
+      },
+      "avg_c_v": {
+        "name": "Cells average voltage"
+      },
+      "avg_c_t": {
+        "name": "Cells average temperature"
+      },
+      "max_history_cell_voltage": {
+        "name": "Max history cell voltage"
+      },
+      "min_history_cell_voltage": {
+        "name": "Min history cell voltage"
+      },
+      "last_log": {
+        "name": "Last log"
+      },
+      "b_total": {
+        "name": "Balancing total"
+      }
+    },
+    "button": {
+      "update_log_history_100": {
+        "name": "Update last 100 log entries"
+      },
+      "update_log_history_500": {
+        "name": "Update last 500 log entries"
+      },
+      "update_log_history_1000": {
+        "name": "Update last 1000 log entries"
+      },
+      "update_log_history_2000": {
+        "name": "Update last 2000 log entries"
+      },
+      "reset_history_cell_voltage": {
+        "name": "Reset history cell voltage"
+      }
+    }
   }
 }
